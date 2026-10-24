@@ -11,6 +11,10 @@ import { createVoice, type VoiceCtl, type VoiceState } from "@/lib/world/voice";
 import { createLiveKitVoice, LiveKitUnavailable } from "@/lib/world/livekitVoice";
 import { useHub } from "@/components/HubProvider";
 import MeetPanel from "@/components/MeetPanel";
+import ScreenPanel, { type CinemaState, type ClassState } from "@/components/ScreenPanel";
+import { npcById } from "@/lib/world/npcs";
+import { MENUS, drinkById } from "@/lib/world/drinks";
+import { LESSONS, parseVideoUrl } from "@/lib/world/screens";
 import { sceneFor } from "@/lib/world/scenes";
 import { useToast } from "@/components/Toast";
 import { Dot } from "@/components/app/Avatar";
@@ -46,6 +50,9 @@ type Api = {
   voiceStart: (h: string) => Promise<void>;
   voiceStop: () => void;
   voiceMute: (m: boolean) => void;
+  drink: (d: string | null) => void;
+  screen: (url: string | null) => void;
+  klass: (l: number, s: number) => void;
 };
 
 const DOCK: { k: Exclude<Panel, null | "orb" | "nova">; icon: string; label: string }[] = [
@@ -95,6 +102,14 @@ export default function WorldView() {
   const [novaQ, setNovaQ] = useState("");
   const [pollIn, setPollIn] = useState("");
   const [gfx, setGfx] = useState<"high" | "low">("high");
+  const [npc, setNpc] = useState<string | null>(null);
+  const [npcLine, setNpcLine] = useState("");
+  const [holding, setHolding] = useState<string | null>(null);
+  const holdTimer = useRef(0);
+  const [cinema, setCinema] = useState<CinemaState | null>(null);
+  const cinemaRef = useRef<CinemaState | null>(null);
+  const [klass, setKlass] = useState<ClassState | null>(null);
+  const klassRef = useRef<ClassState | null>(null);
   useEffect(() => {
     try {
       setGfx(localStorage.getItem("barmo-gfx") === "low" ? "low" : "high");
@@ -157,6 +172,12 @@ export default function WorldView() {
     setPeople([]);
     setPeerNames({});
     setCtx(null);
+    setNpc(null);
+    setHolding(null);
+    setCinema(null);
+    cinemaRef.current = null;
+    setKlass(null);
+    klassRef.current = null;
     setHuddle(null);
     huddleRef.current = null;
     setUnread(0);
@@ -210,6 +231,13 @@ export default function WorldView() {
       },
       onPeerClick: (id) => setSel(id),
       onOrbClick: () => setPanel("orb"),
+      onNpcClick: (id) => {
+        const d = npcById(id);
+        if (!d) return;
+        setPanel(null);
+        setNpc(id);
+        setNpcLine(d.lines[Math.floor(Math.random() * d.lines.length)]);
+      },
       onPortal: (to) => travelRef.current(to),
       onHuddle: (h) => {
         huddleRef.current = h;
@@ -295,6 +323,35 @@ export default function WorldView() {
         world.setBoard(t);
         topicRef.current = t;
         if (!self) push(who, "📋 Topic: " + t);
+      } else if (m.k === "drink") {
+        const d = m.d === null ? null : drinkById(m.d);
+        if (m.d !== null && !d) return;
+        world.setDrink(fromId, d ? d.id : null);
+      } else if (m.k === "screen" && room === "party") {
+        if (muted) return;
+        if (m.url === null) {
+          cinemaRef.current = null;
+          setCinema(null);
+          world.setBoard("Cinema is idle. Sit down, paste a link and press play.");
+          if (!self) push(who, "🎬 stopped the cinema");
+          return;
+        }
+        const v = parseVideoUrl(m.url);
+        if (!v || typeof m.url !== "string") return;
+        const since = typeof m.since === "number" && isFinite(m.since) && Math.abs(Date.now() - m.since) < 6 * 3600_000 ? m.since : Date.now();
+        const c = { url: m.url.trim(), label: v.label, by: who, since };
+        cinemaRef.current = c;
+        setCinema(c);
+        world.setBoard(`NOW SHOWING: ${v.label} (started by ${who})`);
+        if (!self) push(who, "🎬 started a video in the cinema");
+      } else if (m.k === "class" && room === "lab") {
+        const l = Number(m.l);
+        const sl = Number(m.s);
+        if (!Number.isInteger(l) || !Number.isInteger(sl) || l < 0 || l >= LESSONS.length || sl < 0 || sl >= LESSONS[l].slides.length) return;
+        const kc = { l, s: sl, by: who };
+        klassRef.current = kc;
+        setKlass(kc);
+        world.setBoard(`AI CLASS: ${LESSONS[l].title}. ${LESSONS[l].slides[sl].h} (slide ${sl + 1} of ${LESSONS[l].slides.length})`);
       } else if (m.k === "shout") {
         if (muted || typeof m.text !== "string") return;
         const t = m.text.trim().slice(0, 80);
@@ -308,6 +365,21 @@ export default function WorldView() {
         applyOrb(m, null);
         channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, ...m } });
         hubRef.current.complete("orb");
+      },
+      drink: (d) => {
+        const msg = { k: "drink", d };
+        applyOrb(msg, null);
+        channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, ...msg } });
+      },
+      screen: (url) => {
+        const msg = { k: "screen", url, since: Date.now() };
+        applyOrb(msg, null);
+        channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, ...msg } });
+      },
+      klass: (l, s2) => {
+        const msg = { k: "class", l, s: s2 };
+        applyOrb(msg, null);
+        channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, ...msg } });
       },
       topic: (t) => {
         const v = t.trim().slice(0, 140);
@@ -418,6 +490,8 @@ export default function WorldView() {
               if (trackRef.current) channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, k: "music", track: trackRef.current } });
               if (themeRef.current !== "midnight") channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, k: "theme", th: themeRef.current } });
               if (topicRef.current) channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, k: "topic", text: topicRef.current } });
+              if (cinemaRef.current) channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, k: "screen", url: cinemaRef.current.url, since: cinemaRef.current.since } });
+              if (klassRef.current) channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, k: "class", l: klassRef.current.l, s: klassRef.current.s } });
             }, 2000);
           }
           metas.set(id, m);
@@ -633,6 +707,59 @@ export default function WorldView() {
           <span className="np-t"><b>{TRACKS.find((t) => t.id === track)?.name || "Music"}</b><small>{sceneFor(track)?.vibe || "Now playing"}</small></span>
         </button>
       )}
+      {room === "party" && ctx?.kind === "stand" && ctx.seat?.startsWith("c") && (
+        <ScreenPanel mode="cinema" cinema={cinema} klass={null} onPlay={(u) => api.current?.screen(u)} onSlide={() => {}} />
+      )}
+      {room === "lab" && ctx?.kind === "stand" && ctx.seat?.startsWith("d") && (
+        <ScreenPanel mode="class" cinema={null} klass={klass} onPlay={() => {}} onSlide={(l, s2) => api.current?.klass(l, s2)} />
+      )}
+      {npc && !panel && (() => {
+        const d = npcById(npc);
+        if (!d) return null;
+        const menu = d.menu ? MENUS[d.menu] : null;
+        return (
+          <div className="sheet npcsheet" role="dialog" aria-label={"Talk to " + d.name}>
+            <div className="sh"><b>{d.name} <span className="nm">· {d.title}</span></b><button className="x2" onClick={() => setNpc(null)} aria-label="Close">×</button></div>
+            <div className="nl">{npcLine}</div>
+            {menu && (
+              <>
+                <div className="lbl">Menu (all zero-alcohol){holding ? " · you are holding a " + (drinkById(holding)?.n || "drink").toLowerCase() : ""}</div>
+                <div className="chips">
+                  {menu.map((x) => (
+                    <button key={x.id} className={"chip" + (holding === x.id ? " on" : "")} onClick={() => {
+                      api.current?.drink(x.id);
+                      setHolding(x.id);
+                      setNpcLine(x.line);
+                      window.clearTimeout(holdTimer.current);
+                      holdTimer.current = window.setTimeout(() => setHolding(null), 120000);
+                    }}>{x.icon} {x.n}</button>
+                  ))}
+                </div>
+                {holding && <div className="acts"><button className="btn g sm" onClick={() => { api.current?.drink(null); setHolding(null); setNpcLine("No problem. I'll take that."); }}>Put the drink down</button></div>}
+                <p className="hint">Drinks disappear on their own after two minutes.</p>
+              </>
+            )}
+            {d.kind === "dancer" && (
+              <div className="acts">
+                <button className="btn sm" onClick={() => { api.current?.emote("dance"); setNpcLine(track ? "Let's go!" : "Put a song on at the DJ deck and I'll show you moves."); }}>💃 Dance together</button>
+                <button className="btn g sm" onClick={() => { setNpc(null); setPanel("orb"); }}>🎧 Open the DJ deck</button>
+              </div>
+            )}
+            {d.kind === "scientist" && (
+              <div className="acts">
+                <button className="btn sm" onClick={() => { api.current?.klass(0, 0); setNpcLine("Class is starting. Sit at a workstation on the east side to follow along."); }}>🎓 Start an AI class</button>
+                <button className="btn g sm" onClick={() => { setNpc(null); setPanel("nova"); }}>🤖 Ask Nova anything</button>
+              </div>
+            )}
+            {d.kind === "tech" && (
+              <div className="acts">
+                <button className="btn g sm" onClick={() => setNpcLine("Sit at any workstation: the screens show a model training live, and you can join the class from there.")}>🖥️ What are those screens?</button>
+              </div>
+            )}
+            <div className="acts"><button className="btn g sm" onClick={() => setNpcLine(d.lines[Math.floor(Math.random() * d.lines.length)])}>💬 Chat</button></div>
+          </div>
+        );
+      })()}
       {room === "meeting" && ctx?.kind === "stand" && (
         <MeetPanel name={name} blocked={hub.blocked} muted={hub.muted} onJoin={() => api.current?.voiceStop()} />
       )}
@@ -642,7 +769,7 @@ export default function WorldView() {
 
       {ctx && !panel && (
         <button className="btn ctxbtn" onClick={() => api.current?.interact()}>
-          {ctx.kind === "sit" ? "🪑" : ctx.kind === "stand" ? "🚶" : "🔮"} {ctx.label}
+          {ctx.kind === "sit" ? "🪑" : ctx.kind === "stand" ? "🚶" : ctx.kind === "talk" ? "💬" : "🔮"} {ctx.label}
         </button>
       )}
 
@@ -728,6 +855,8 @@ export default function WorldView() {
               <div className="lbl">Seating</div>
               <div className="acts"><button className="btn g" onClick={findSeat}>🪑 Find me a seat</button></div>
               {room === "meeting" && <p className="hint">🎥 Sit at the table to start or join the video meeting. Stand up to leave it.</p>}
+              {room === "party" && <p className="hint">🎬 Sit in the cinema seats on the west side, paste a video link and watch together.</p>}
+              {room === "lab" && <p className="hint">🎓 Sit at a workstation to join the AI class and ask Nova questions.</p>}
             </>
           )}
           {(room === "meeting" || room === "lab") && (

@@ -101,7 +101,7 @@ export const ROOMS: RoomDef[] = [
     name: "Party Hall",
     icon: "🪩",
     tag: "Music, lights and dancing",
-    blurb: "A dance floor with a disco ball, light show and a DJ deck. Pick a track, change the lights, set off confetti.",
+    blurb: "A dance floor with a disco ball, a DJ deck, a juice bar and a cinema. Pick a track, grab a drink, or sit down and watch a video together.",
     color: 0xff5ac8,
     hw: 10.2, z0: -8.2, z1: 8.0,
     orb: { x: 0, z: -5.2 },
@@ -111,10 +111,11 @@ export const ROOMS: RoomDef[] = [
       { id: "floor", name: "Dance floor", icon: "💃", x: 0, z: 1, sx: 0, sz: 2 },
       { id: "orb", name: "DJ deck", icon: "🎧", x: 0, z: -5.2, sx: 0, sz: -3.6 },
       { id: "bar", name: "Juice bar", icon: "🍹", x: 8.6, z: 2.5, sx: 6.6, sz: 2.5 },
-      { id: "couch", name: "Chill couches", icon: "🛋️", x: -8, z: 2.5, sx: -5.4, sz: 2.5 },
+      { id: "cinema", name: "Party cinema", icon: "🎬", x: -9, z: 2.5, sx: -4.2, sz: 2.5 },
     ],
     portals: [BACK],
-    seats: [],
+    // Cinema: two rows of three seats facing the big screen on the west wall (ids start with "c")
+    seats: [-6.8, -5.4].flatMap((x, r) => [0.9, 2.5, 4.1].map((z, i): Seat => ({ id: `c${r}${i}`, x, z, yaw: -PI / 2 }))),
     huddles: [{ id: "vip", name: "VIP corner", x: -6, z: -4.4, r: 1.8 }],
   },
   {
