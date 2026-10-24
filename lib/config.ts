@@ -8,3 +8,9 @@
  * Nothing was deleted: flip this one value later and the whole login system comes back.
  */
 export const AUTH_ENABLED = false;
+
+/**
+ * AVATAR_REALISTIC = true  -> natural body proportions, shaped face (nose, lips, brow, jaw), real eyes, fabric and skin shading.
+ * AVATAR_REALISTIC = false -> the rounder v19 look.
+ */
+export const AVATAR_REALISTIC = true;

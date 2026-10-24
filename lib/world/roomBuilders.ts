@@ -292,12 +292,19 @@ function buildParty(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
   bx(g, 1.25, 0.05, 6.05, 8.6, 1.12, 2.5, glow(0xff5ac8));
   bx(g, 0.3, 2.4, 6, 9.9, 1.6, 2.5, glow(0x3ec8ff, 0.35));
   [0.5, 2.5, 4.5].forEach((z) => cyl(g, 0.25, 0.25, 0.7, 7.5, 0.35, z, std(0x2a2f3f, 0.4, 0.5), 14));
-  const sofa = std(0x6a3f8a, 0.85);
-  ([[-8.4, 0.5], [-8.4, 4.5]] as const).forEach(([x, z]) => {
-    bx(g, 1.0, 0.5, 2.2, x, 0.25, z, sofa, col);
-    bx(g, 0.3, 0.9, 2.2, x - 0.45, 0.7, z, sofa);
+  // Cinema (west): big screen on the wall and two rows of theatre seats
+  const cin = makeBoard("PARTY CINEMA", "Sit down, paste a link and press play.", 0xff5ac8);
+  screen(g, cin.tex, 6.4, 2.4, -(room.hw + 0.6) + 0.12, 2.9, 2.5, Math.PI / 2, 0xff5ac8);
+  const seatM = std(0x6a1f4a, 0.85);
+  const rowM = std(0x1a1030, 0.6, 0.4);
+  [-6.8, -5.4].forEach((x) => {
+    [0.9, 2.5, 4.1].forEach((z) => {
+      bx(g, 0.58, 0.12, 0.58, x, 0.4, z, seatM);
+      bx(g, 0.1, 0.62, 0.58, x + 0.28, 0.72, z, seatM);
+      bx(g, 0.5, 0.36, 0.5, x + 0.05, 0.18, z, rowM);
+    });
   });
-  bx(g, 0.9, 0.35, 0.9, -7.0, 0.18, 2.5, std(0x14101f, 0.3, 0.6), col);
+  bx(g, 0.18, 0.05, 6.4, -(room.hw + 0.6) + 0.35, 0.9, 2.5, glow(0xff5ac8, 0.5)); // glow strip under the screen
   // neon sign on the north wall
   const sg = makeBoard("PARTY HALL", "Dance. Chat. Celebrate.", room.color);
   screen(g, sg.tex, 4.6, 1.4, 0, 4.05, s.north + 0.12, 0, room.color);
@@ -384,8 +391,10 @@ function buildParty(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
       decks.forEach((d, i) => (d.rotation.y = t * 0.002 * (i ? -1 : 1)));
       vis.draw(t, mood || { scene: null, name: "", level, bands, beat: { step: 0, beat: 0, tick: 0 }, reduce: false });
     },
+    setBoard: cin.set,
     dispose() {
       sg.tex.dispose();
+      cin.tex.dispose();
       vis.dispose();
       tiles.dispose();
       disposeTree(sc, g);
@@ -417,6 +426,73 @@ function codeTexture(seed: number) {
     }
   }
   return tex;
+}
+
+/** A live "AI terminal" screen: streaming model output, a falling loss curve and flickering neuron activations. */
+function aiScreen(seed: number) {
+  const cv = document.createElement("canvas");
+  cv.width = 512;
+  cv.height = 288;
+  const cx = cv.getContext("2d");
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const WORDS = ["tokenizing input", "attention heads: 32", "loading weights", "batch 128 ok", "grad norm 0.82", "embedding > layer 12", "sampling temp 0.7", "> explain gravity", "> Hello! How can I help?", "val acc 94.2%", "saving checkpoint", "> write a haiku", "cache hit 87%", "decoding next token"];
+  const lines: string[] = [];
+  let last = 0;
+  let lastLine = 0;
+  const draw = (t: number) => {
+    if (!cx || t - last < 90) return;
+    last = t;
+    if (t - lastLine > 420 + seed * 37) {
+      lastLine = t;
+      lines.push(WORDS[Math.floor(Math.random() * WORDS.length)]);
+      if (lines.length > 9) lines.shift();
+    }
+    cx.fillStyle = "#050b14";
+    cx.fillRect(0, 0, 512, 288);
+    cx.fillStyle = "#0e2a33";
+    cx.fillRect(0, 0, 512, 30);
+    cx.fillStyle = "#5ef2c8";
+    cx.font = "700 16px monospace";
+    cx.fillText(`NOVA-7  training  epoch ${Math.floor(t / 1500 + seed * 40) % 1000}`, 10, 21);
+    cx.font = "13px monospace";
+    lines.forEach((l, i) => {
+      cx.fillStyle = l.startsWith(">") ? "#ffffff" : "#7fe8c8";
+      cx.fillText(l, 12, 52 + i * 18);
+    });
+    // loss curve
+    const e = t / 1500 + seed * 40;
+    cx.strokeStyle = "#1c4a5a";
+    cx.strokeRect(270, 42, 230, 110);
+    cx.strokeStyle = "#a66bff";
+    cx.lineWidth = 2;
+    cx.beginPath();
+    for (let i = 0; i < 40; i++) {
+      const x = e - 39 + i;
+      const loss = 2.2 * Math.exp(-((x % 120) + 1) * 0.05) + 0.15 + Math.sin(x * 2.1 + seed) * 0.04;
+      const px = 272 + i * 5.7;
+      const py = 148 - Math.min(1, loss / 2.4) * 102;
+      if (i) cx.lineTo(px, py);
+      else cx.moveTo(px, py);
+    }
+    cx.stroke();
+    cx.lineWidth = 1;
+    cx.fillStyle = "#c9b8ff";
+    cx.font = "12px monospace";
+    cx.fillText("loss", 276, 58);
+    // neuron activations
+    for (let r = 0; r < 4; r++)
+      for (let c = 0; c < 24; c++) {
+        const a = (Math.sin(t * 0.004 + c * 0.7 + r * 1.9 + seed) + 1) / 2;
+        cx.fillStyle = `rgba(94,242,200,${0.1 + a * 0.85})`;
+        cx.fillRect(12 + c * 20.4, 220 + r * 14, 16, 10);
+      }
+    cx.fillStyle = "#5ef2c8";
+    cx.font = "12px monospace";
+    cx.fillText("activations", 12, 212);
+    tex.needsUpdate = true;
+  };
+  return { tex, draw };
 }
 
 function buildLab(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
@@ -496,11 +572,12 @@ function buildLab(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
   // workstations (east)
   const desk = std(0x16263a, 0.4, 0.5);
   const codes = [codeTexture(3), codeTexture(11), codeTexture(29)];
+  const ai = [aiScreen(1), aiScreen(2)];
   room.seats.forEach((st, i) => {
     bx(g, 1.1, 0.07, 2.0, 8.5, 0.76, st.z, desk, col);
     bx(g, 0.08, 0.76, 1.8, 8.5, 0.38, st.z, std(0x0f1a28, 0.4, 0.5));
     bx(g, 0.1, 0.35, 0.1, 8.8, 1.0, st.z, std(0x14161d, 0.3, 0.6));
-    const sc2 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85), new THREE.MeshBasicMaterial({ map: codes[i % 3], toneMapped: false }));
+    const sc2 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85), new THREE.MeshBasicMaterial({ map: ai[i % 2].tex, toneMapped: false }));
     sc2.position.set(8.74, 1.42, st.z);
     sc2.rotation.y = -Math.PI / 2;
     g.add(sc2);
@@ -524,6 +601,7 @@ function buildLab(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
   ([[-8.9, -7.6], [8.9, -7.6], [-8.9, 7.2], [8.9, 7.2]] as const).forEach(([x, z]) => cyl(g, 0.12, 0.12, 4.6, x, 2.3, z, glow(room.color, 0.55), 10));
   return {
     update(t, dt) {
+      ai.forEach((a) => a.draw(t));
       net.rotation.y = t * 0.00022;
       rings[0].rotation.set(t * 0.0004, t * 0.0003, 0);
       rings[1].rotation.set(Math.PI / 3, t * -0.0005, t * 0.0002);
@@ -542,6 +620,7 @@ function buildLab(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
     dispose() {
       board.tex.dispose();
       codes.forEach((c) => c.dispose());
+      ai.forEach((a) => a.tex.dispose());
       eg.dispose();
       disposeTree(sc, g);
     },

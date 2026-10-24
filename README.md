@@ -1,7 +1,22 @@
-# BARMO — 3D lounge + community
+# BARMO Lounge V1.1 — 3D lounge + community
 
 Open the site, pick a name and avatar, walk around a shared 3D lounge, and meet people live.
 No sign-up. Real-time uses Supabase Realtime only (no database tables).
+
+## V1.1: a living world
+
+- **Realistic people.** New avatar builder (switch back in `lib/config.ts`, `AVATAR_REALISTIC`): natural body proportions, flatter torso, jointed arms and legs, hands, a shaped face (jaw, nose, lips, brow, eyelids), natural eyes, matte cloth and soft skin shading. All the same customisation options still work.
+- **A crew that lives there** (`lib/world/npcs.ts`): Marco the barista (lounge coffee bar) and Lena (Party Hall juice bar) polish glasses, shake drinks and wipe the counter; four dancers who dance to the beat of whatever song is playing; Dr. Nova (AI scientist) who walks the lab and explains the hologram; Ravi at the server racks. Walk up and press **Talk**, or tap them.
+- **Drinks.** Order from the menu (all zero-alcohol). You hold the drink, sip it now and then, and other players see it. It disappears after two minutes.
+- **Party cinema.** Sit in the cinema seats (west side of the Party Hall), paste a YouTube, Vimeo or direct .mp4/.webm link, and everyone seated watches it. Late joiners start near the same point. Only https links to those sources are accepted. Each person controls pause/seek in their own player.
+- **AI class.** Sit at a lab workstation: five lessons (what AI is, neural networks, chatbots, prompting, building an AI app), shared slides, and **Ask Nova**. Nova uses your OpenRouter/Anthropic key if set (same server setup as the existing `/api/nova` route) and otherwise answers from the class notes.
+- **Live AI screens.** Lab workstations now show a model training: streaming output, a falling loss curve and neuron activations.
+
+## V1: realism pass
+
+- **Look:** filmic tone mapping, soft real-time shadows (the avatars and furniture now cast them), studio reflections on glossy surfaces, grain on big floors.
+- **More 3D:** every world except Cosmos gets ceiling beams, night-city windows on both side walls, framed art and glowing floor lamps. Lounge, Meeting, Party and Lab all get shadows and reflections.
+- **Graphics setting:** "Low" turns off shadows, reflections, tone mapping and glow, for slow phones. Code: `lib/world/realism.ts`. Version number: `lib/version.ts`.
 
 ## What's new in v20 (music-linked rooms, video meetings, login off)
 

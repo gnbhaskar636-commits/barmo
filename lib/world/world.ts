@@ -8,6 +8,9 @@ import { THEMES, addOrb, makeThemeCtl, type BurstKind } from "@/lib/world/orb";
 import { currentTrack, musicBands, musicBeat, musicLevel, playing } from "@/lib/world/music";
 import { sceneFor, type Mood } from "@/lib/world/scenes";
 import { addAmbience } from "@/lib/world/ambience";
+import { makeRealism, shade } from "@/lib/world/realism";
+import { addNpcs } from "@/lib/world/npcs";
+import { disposeCup, drinkById, makeCup } from "@/lib/world/drinks";
 import { addConnect, type LinkNode } from "@/lib/world/connect";
 import { addTerrace, onTerrace } from "@/lib/world/terrace";
 import { addSky } from "@/lib/world/sky";
@@ -34,7 +37,7 @@ export interface RemotePeerState {
 /** Emoji people can float above their head. */
 export const REACTIONS = ["❤️", "👏", "🔥", "😂", "🚀", "💡", "🤯", "👍"];
 
-export interface WorldContext { kind: "sit" | "stand" | "orb"; label: string }
+export interface WorldContext { kind: "sit" | "stand" | "orb" | "talk"; label: string; /** Seat id while sitting. */ seat?: string; /** NPC id for "talk". */ npc?: string }
 
 export interface WorldOptions {
   full: boolean;
@@ -64,6 +67,8 @@ export interface WorldOptions {
   onHuddle?: (h: { id: string; name: string } | null) => void;
   /** Fired when the context button should change (null = hide it). */
   onContext?: (c: WorldContext | null) => void;
+  /** Fired when the user taps an NPC (bartender, dancer, scientist) or presses the Talk button. */
+  onNpcClick?: (id: string) => void;
 }
 
 function webglAvailable(): boolean {
@@ -105,10 +110,32 @@ export interface World {
   setQuality: (q: "high" | "low") => void;
   /** Change the text on the shared screen (meeting agenda / prompt wall). */
   setBoard: (text: string) => void;
+  /** Hold a drink (id null = me). drinkId null = put it down. */
+  setDrink: (id: string | null, drinkId: string | null) => void;
 }
 
 /** Height of a chair seat; a sitting avatar's hips are placed here. */
 const SEAT_H = 0.46;
+
+/** Puts a drink in (or takes it out of) someone's hand. It disappears by itself after two minutes. */
+function setCup(g: THREE.Group, drinkId: string | null) {
+  const old = g.userData.cup as THREE.Group | undefined;
+  if (old) {
+    old.parent?.remove(old);
+    disposeCup(old);
+    g.userData.cup = undefined;
+  }
+  g.userData.drinkUntil = 0;
+  const d = drinkById(drinkId);
+  const arms = g.userData.arms as THREE.Group[] | undefined;
+  if (!d || !arms) return;
+  const cup = makeCup(d);
+  cup.position.set(0, -0.64, 0.06);
+  arms[1].add(cup);
+  shade(cup);
+  g.userData.cup = cup;
+  g.userData.drinkUntil = performance.now() + 120000;
+}
 
 export function pose(g: THREE.Group, moving: boolean, t: number, groove = 0) {
   const legs = g.userData.legs as THREE.Group[],
@@ -154,6 +181,12 @@ export function pose(g: THREE.Group, moving: boolean, t: number, groove = 0) {
     g.rotation.z = 0;
     g.position.y = SEAT_H - ((g.userData.hipY as number) || 0.8) + Math.sin(t * 0.002) * 0.008;
   } else g.position.y = Math.max(0, bob);
+  // holding a drink: arm raised a little, and a sip every few seconds
+  if (g.userData.cup && !e && !moving) {
+    const ph = (t + ((g.userData.phase as number) || 0)) % 9000;
+    const sip = ph < 1500 ? Math.sin((ph / 1500) * Math.PI) : 0;
+    arms[1].rotation.set(-0.8 - sip * 1.1, 0, -0.12);
+  }
   const eyes = g.userData.eyes as THREE.Object3D[] | undefined;
   if (eyes) {
     const b = (t + ((g.userData.phase as number) || 0)) % 3800 < 130 ? 0.12 : 1;
@@ -217,6 +250,7 @@ class Peer {
   constructor(cfg: AvatarConfig, s: RemotePeerState, host: HTMLElement) {
     this.cfg = cfg;
     this.group = makeAvatar(cfg);
+    shade(this.group);
     addRing(this.group, 0x7fb59a);
     this.group.position.set(s.x, 0, s.z);
     this.group.rotation.y = s.yaw;
@@ -289,7 +323,7 @@ export function runWorld(
   if (!webglAvailable()) {
     host.innerHTML =
       '<div class="empty" style="margin:20px">3D is not available in this browser. Turn on hardware acceleration or try a current version of Chrome, Edge, Firefox or Safari.</div>';
-    return { destroy: () => {}, applyPeerState: () => {}, removePeer: () => {}, say: () => {}, emote: () => {}, teleport: () => {}, setTheme: () => {}, burst: () => {}, shout: () => {}, emoteAll: () => {}, interact: () => {}, react: () => {}, setSpeaking: () => {}, setQuality: () => {}, sitNearest: () => false, stand: () => {}, setBoard: () => {} };
+    return { destroy: () => {}, applyPeerState: () => {}, removePeer: () => {}, say: () => {}, emote: () => {}, teleport: () => {}, setTheme: () => {}, burst: () => {}, shout: () => {}, emoteAll: () => {}, interact: () => {}, react: () => {}, setSpeaking: () => {}, setQuality: () => {}, sitNearest: () => false, stand: () => {}, setBoard: () => {}, setDrink: () => {} };
   }
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -324,6 +358,16 @@ export function runWorld(
   } catch {
     ambience = null;
   }
+  // V1 realism: filmic look, shadows, reflections and extra set dressing (all guarded)
+  const realism = makeRealism(renderer, scene);
+  try {
+    realism.apply(hq);
+    realism.prepare(room, col);
+  } catch {
+    /* the lounge works without it */
+  }
+  const npcs = addNpcs(scene, room.id, col);
+  shade(npcs.group);
   const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   let musicId: string | null = null;
   let musicScene = sceneFor(null);
@@ -387,6 +431,7 @@ export function runWorld(
 
   const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 80);
   const me = makeAvatar(opts.myCfg);
+  shade(me);
   addRing(me, 0xc8a26b);
   me.position.set(spawn.x, 0, spawn.z);
   scene.add(me);
@@ -577,7 +622,9 @@ export function runWorld(
         }
       });
       const oh = opts.onOrbClick ? ray.intersectObject(orb.group, true)[0] : undefined;
-      if (oh && oh.distance < bd) opts.onOrbClick?.();
+      const nh = npcs.has && opts.onNpcClick ? npcs.pick(ray) : null;
+      if (nh && nh.dist < bd && (!oh || nh.dist < oh.distance)) opts.onNpcClick?.(nh.id);
+      else if (oh && oh.distance < bd) opts.onOrbClick?.();
       else if (best) opts.onPeerClick?.(best);
       else {
         // Tap the floor (or a chair, or a portal) and walk there.
@@ -613,7 +660,11 @@ export function runWorld(
     }
     const st = nearestSeat(1.7);
     if (st) sitDown(st);
-    else if (orbNear) opts.onOrbClick?.();
+    else {
+      const n = npcs.has ? npcs.near(me.position.x, me.position.z, 2.6) : null;
+      if (n) opts.onNpcClick?.(n.id);
+      else if (orbNear) opts.onOrbClick?.();
+    }
   }
 
   function size() {
@@ -777,10 +828,12 @@ export function runWorld(
     if (opts.full) {
       // What the big button should offer, and walking into portal rings.
       let c: WorldContext | null = null;
-      if (seat) c = { kind: "stand", label: "Stand up" };
+      const npcNear = !seat && npcs.has ? npcs.near(me.position.x, me.position.z, 2.6) : null;
+      if (seat) c = { kind: "stand", label: "Stand up", seat: seat.id };
       else if (nearestSeat(1.7)) c = { kind: "sit", label: "Sit down" };
+      else if (npcNear) c = { kind: "talk", label: "Talk to " + npcNear.name, npc: npcNear.id };
       else if (orbNear) c = { kind: "orb", label: "Use " + room.orbName };
-      const key = c ? c.kind + c.label : "";
+      const key = c ? c.kind + c.label + (c.seat || "") : "";
       if (key !== ctxKey) {
         ctxKey = key;
         opts.onContext?.(c);
@@ -818,6 +871,12 @@ export function runWorld(
     try {
       terrace.update(t, dt, me); // rooftop pet + hoverboard (local only)
       ambience?.update(t, dt, mood);
+      realism.update(t);
+      npcs.update(t, dt, me.position, mood);
+      if (me.userData.cup && performance.now() > ((me.userData.drinkUntil as number) || 0)) setCup(me, null);
+      peers.forEach((p) => {
+        if (p.group.userData.cup && performance.now() > ((p.group.userData.drinkUntil as number) || 0)) setCup(p.group, null);
+      });
       aura?.update(t);
       if (myPet) {
         myPet.visible = !(isLounge && onTerrace(me.position.x, me.position.z));
@@ -898,6 +957,8 @@ export function runWorld(
       orb.dispose();
       web.dispose();
       ambience?.dispose();
+      npcs.dispose();
+      realism.dispose();
       terrace.dispose();
       portals.dispose();
       huddles.dispose();
@@ -1017,13 +1078,19 @@ export function runWorld(
     },
     setQuality(q) {
       hq = q === "high";
+      realism.apply(hq);
     },
     setBoard(text) {
       rb?.setBoard?.(text);
     },
+    setDrink(id, drinkId) {
+      const g = id ? peers.get(id)?.group : me;
+      if (g) setCup(g, drinkId);
+    },
     removePeer(id) {
       const p = peers.get(id);
       if (!p) return;
+      setCup(p.group, null);
       scene.remove(p.group);
       p.dispose(host);
       peers.delete(id);

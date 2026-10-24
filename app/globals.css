@@ -587,3 +587,26 @@ main>*{animation:rise .4s ease both}
 .meet .merr{font-size:12px;color:#ffd0cc;text-align:center}
 @media(max-width:760px){.meet{left:12px;right:12px;width:auto;top:60px}.mgrid{max-height:36dvh}.nowplaying{top:60px}}
 @media(prefers-reduced-motion:reduce){.eq i,.partyhint,.nowplaying,.meet,.meetask{animation:none}.entering .ei{animation:none}}
+
+/* ===== v1.1: cinema, AI class, NPC dialogue ===== */
+.cinema{position:absolute;left:0;right:0;margin:0 auto;top:64px;z-index:6;width:min(640px,calc(100% - 24px));display:flex;flex-direction:column;gap:8px;padding:10px;background:rgba(14,10,24,.86);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,90,200,.5);border-radius:18px;box-shadow:0 16px 44px rgba(0,0,0,.5);animation:npIn .35s ease both;max-height:calc(100dvh - 190px);overflow-y:auto}
+.cinema .mhead{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#ffd6f2}
+.cinema .mmin{background:none;border:1px solid var(--line);border-radius:8px;width:28px;height:28px;cursor:pointer;color:var(--ink)}
+.cbody{display:flex;flex-direction:column;gap:8px}
+.cframe{position:relative;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000}
+.cframe iframe,.cframe video{position:absolute;inset:0;width:100%;height:100%;border:0}
+.cmeta{font-size:12px;color:var(--mute)}
+.cact{display:flex;gap:8px;flex-wrap:wrap}
+.crow{display:flex;gap:8px}
+.crow input{flex:1;min-width:0;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);font:inherit}
+.cinema .merr{font-size:12px;color:#ffd0cc}
+.slide{background:rgba(94,242,200,.07);border:1px solid rgba(94,242,200,.3);border-radius:12px;padding:12px 14px}
+.slide .sl-n{font-size:11.5px;color:#7fe8c8;margin-bottom:4px}
+.slide h4{margin:0 0 6px;font:600 18px Fraunces,Georgia,serif}
+.slide ul{margin:0;padding-left:18px;font-size:14px;line-height:1.5}
+.canswer{font-size:13.5px;line-height:1.5;background:rgba(255,255,255,.06);border-radius:10px;padding:10px 12px}
+.cinema:has(.slide){border-color:rgba(94,242,200,.5)}
+.npcsheet .nl{font-size:15px;line-height:1.5;margin:4px 0 10px;padding:10px 12px;background:rgba(255,255,255,.06);border-radius:12px}
+.npcsheet .nm{font-size:12px;color:var(--mute)}
+@media(max-width:760px){.cinema{top:60px}}
+@media(prefers-reduced-motion:reduce){.cinema{animation:none}}

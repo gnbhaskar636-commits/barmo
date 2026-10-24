@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { AVATAR_REALISTIC } from "@/lib/config";
 
 export type Acc = "none" | "cap" | "crown" | "headphones" | "shades" | "halo" | "visor" | "antenna";
 export type Hair = "short" | "long" | "none" | "bun" | "spiky" | "curly" | "mohawk";
@@ -203,17 +204,23 @@ const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
   const c = sanitizeConfig(typeof x === "string" ? cfgOf(x) : x);
   const g = new THREE.Group();
+  const R = AVATAR_REALISTIC;
   const leg = 0.72 * c.h * c.leg,
     tor = 0.58 * c.h,
-    sw = 0.34 * c.sh,
-    bw = 0.26 * c.build,
-    hr = 0.15 * c.head,
+    sw = (R ? 0.23 : 0.34) * c.sh,
+    bw = (R ? 0.185 : 0.26) * c.build,
+    hr = (R ? 0.118 : 0.15) * c.head,
     ar = 0.54 * c.h;
+  const zs = R ? 0.72 : 1; // a real torso is flatter front to back
+  const fab = R ? 0.88 : 0.65; // cloth is matte
+  const SK = R ? 0.5 : 0.65; // skin has a soft sheen
+  const HR = R ? 0.42 : 0.65; // hair catches light
+  const mix = (a: number, b: number, k: number) => new THREE.Color(a).lerp(new THREE.Color(b), k).getHex();
   const hipY = 0.06 + leg;
   const torMid = hipY + tor / 2;
   const neckY = hipY + tor;
   const hy = neckY + 0.04 + hr;
-  const rMid = (sw + bw) / 2;
+  const rMid = ((sw + bw) / 2) * zs;
   const long = c.fit !== "tee";
   const dark = (col: number, k = 0.7) => new THREE.Color(col).multiplyScalar(k).getHex();
 
@@ -222,15 +229,45 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
   const arms: THREE.Group[] = [];
   [-1, 1].forEach((s) => {
     const lp = new THREE.Group();
-    lp.position.set(s * 0.1 * c.build, hipY, 0);
-    new Builder()
-      .add(cyl(0.075 * c.build, 0.062 * c.build, leg), c.bottom, { at: [0, -leg / 2, 0] })
-      .add(cyl(0.068 * c.build, 0.068 * c.build, 0.05), dark(c.bottom, 0.8), { at: [0, -leg + 0.03, 0] })
-      .add(box(0.13, 0.075, 0.27), c.shoe, { at: [0, -leg - 0.02, 0.05], r: 0.5 })
-      .add(box(0.135, 0.022, 0.275), c.trim, { at: [0, -leg - 0.06, 0.05], r: 0.4 })
-      .into(lp);
+    lp.position.set(s * (R ? 0.088 : 0.1) * c.build, hipY, 0);
+    if (R) {
+      const th = leg * 0.5;
+      const ca = leg * 0.5;
+      new Builder()
+        .add(cyl(0.084 * c.build, 0.064 * c.build, th), c.bottom, { at: [0, -th / 2, 0], r: fab })
+        .add(sph(0.063 * c.build, 10, 8), c.bottom, { at: [0, -th, 0], r: fab })
+        .add(cyl(0.062 * c.build, 0.042 * c.build, ca), c.bottom, { at: [0, -th - ca / 2, 0], r: fab })
+        .add(cyl(0.046 * c.build, 0.046 * c.build, 0.05), dark(c.bottom, 0.8), { at: [0, -leg + 0.03, 0], r: fab })
+        .add(box(0.1, 0.07, 0.22), c.shoe, { at: [0, -leg - 0.02, 0.04], r: 0.45 })
+        .add(sph(0.05, 10, 8), c.shoe, { at: [0, -leg - 0.02, 0.15], sc: [1.05, 0.85, 1.25], r: 0.45 })
+        .add(box(0.104, 0.02, 0.27), c.trim, { at: [0, -leg - 0.06, 0.06], r: 0.4 })
+        .into(lp);
+    } else
+      new Builder()
+        .add(cyl(0.075 * c.build, 0.062 * c.build, leg), c.bottom, { at: [0, -leg / 2, 0] })
+        .add(cyl(0.068 * c.build, 0.068 * c.build, 0.05), dark(c.bottom, 0.8), { at: [0, -leg + 0.03, 0] })
+        .add(box(0.13, 0.075, 0.27), c.shoe, { at: [0, -leg - 0.02, 0.05], r: 0.5 })
+        .add(box(0.135, 0.022, 0.275), c.trim, { at: [0, -leg - 0.06, 0.05], r: 0.4 })
+        .into(lp);
     const ap = new THREE.Group();
-    ap.position.set(s * (sw + 0.06), neckY - 0.04, 0);
+    ap.position.set(s * (sw + (R ? 0.045 : 0.06)), neckY - 0.04, 0);
+    if (R) {
+      const b = c.build;
+      const ua = ar * 0.5;
+      const fa = ar * 0.5;
+      const fore = long ? c.top : c.skin;
+      const ab = new Builder()
+        .add(sph(0.058 * Math.max(0.9, b), 12, 8), c.top, { r: fab })
+        .add(cyl(0.046 * b, 0.04 * b, ua), c.top, { at: [0, -ua / 2, 0], r: fab })
+        .add(sph(0.04 * b, 8, 6), fore, { at: [0, -ua, 0], r: long ? fab : SK })
+        .add(cyl(0.04 * b, 0.03 * b, fa), fore, { at: [0, -ua - fa / 2, 0], r: long ? fab : SK })
+        .add(box(0.054, 0.09, 0.03), c.skin, { at: [0, -ar - 0.03, 0], r: SK })
+        .add(box(0.05, 0.045, 0.026), c.skin, { at: [0, -ar - 0.09, 0.002], r: SK })
+        .add(box(0.014, 0.055, 0.022), c.skin, { at: [s * -0.034, -ar - 0.03, 0.012], rot: [0, 0, s * 0.35], r: SK });
+      if (!long) ab.add(cyl(0.05 * b, 0.047 * b, ar * 0.34), c.top, { at: [0, -ar * 0.17, 0], r: fab });
+      else if (c.fit !== "suit") ab.add(cyl(0.037 * b, 0.037 * b, 0.03), c.trim, { at: [0, -ar * 0.93, 0], r: 0.5 });
+      ab.into(ap);
+    } else {
     const sleeveLen = long ? ar * 0.94 : ar * 0.4;
     const ab = new Builder()
       .add(sph(0.07 * Math.max(0.9, c.build)), c.top)
@@ -239,6 +276,7 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
     if (!long) ab.add(cyl(0.04 * c.build, 0.037 * c.build, ar - sleeveLen), c.skin, { at: [0, -sleeveLen - (ar - sleeveLen) / 2, 0] });
     else if (c.fit !== "suit") ab.add(cyl(0.048 * c.build, 0.048 * c.build, 0.035), c.trim, { at: [0, -ar * 0.9, 0], r: 0.5 });
     ab.into(ap);
+    }
     g.add(lp, ap);
     legs.push(lp);
     arms.push(ap);
@@ -246,10 +284,11 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
 
   // ---- static body (one merged mesh per material) ----
   const S = new Builder();
-  S.add(cyl(sw, bw, tor, 18), c.top, { at: [0, torMid, 0] });
-  S.add(cyl(bw * 1.03, bw * 1.03, 0.045, 18), dark(c.bottom, 0.9), { at: [0, hipY + 0.03, 0], r: 0.5 });
-  S.add(cyl(hr * 0.36, hr * 0.42, 0.07), c.skin, { at: [0, neckY + 0.015, 0] });
-  const fz = (frac: number) => bw + (sw - bw) * frac + 0.006; // torso front surface at height fraction
+  S.add(cyl(sw, bw, tor, 18), c.top, { at: [0, torMid, 0], sc: [1, 1, zs], r: fab });
+  if (R) [-1, 1].forEach((s) => S.add(sph(sw * 0.42, 12, 8), c.top, { at: [s * sw * 0.64, neckY - 0.015, 0], sc: [1.25, 0.55, 0.95], r: fab }));
+  S.add(cyl(bw * 1.03, bw * 1.03, 0.045, 18), dark(c.bottom, 0.9), { at: [0, hipY + 0.03, 0], sc: [1, 1, zs], r: 0.5 });
+  S.add(cyl(hr * (R ? 0.4 : 0.36), hr * (R ? 0.46 : 0.42), R ? 0.1 : 0.07), c.skin, { at: [0, neckY + (R ? 0.03 : 0.015), 0], r: SK });
+  const fz = (frac: number) => (bw + (sw - bw) * frac) * zs + 0.006; // torso front surface at height fraction
   if (c.fit === "hoodie") {
     S.add(sph(hr * 1.05), c.top, { at: [0, neckY + hr * 0.2, -hr * 0.6], sc: [1.15, 0.8, 0.6] });
     S.add(box(sw * 1.25, 0.11, 0.03), dark(c.top, 0.82), { at: [0, hipY + 0.14, fz(0.2)] });
@@ -267,9 +306,26 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
   }
 
   // head
-  S.add(sph(hr, 24, 18), c.skin, { at: [0, hy, 0] });
-  [-1, 1].forEach((s) => S.add(sph(hr * 0.2), c.skin, { at: [s * hr * 0.98, hy - hr * 0.02, 0], sc: [0.5, 1, 0.8] }));
-  S.add(sph(hr * 0.09), dark(c.skin, 0.93), { at: [0, hy - hr * 0.1, hr * 0.98] });
+  if (R) {
+    S.add(sph(hr, 26, 20), c.skin, { at: [0, hy, 0], sc: [0.9, 1.08, 0.98], r: SK });
+    S.add(sph(hr * 0.78, 20, 14), c.skin, { at: [0, hy - hr * 0.42, hr * 0.12], sc: [0.88, 0.9, 0.95], r: SK }); // jaw
+    S.add(sph(hr * 0.2, 10, 8), c.skin, { at: [0, hy - hr * 0.8, hr * 0.46], sc: [1.1, 0.8, 0.9], r: SK }); // chin
+    [-1, 1].forEach((s) => {
+      S.add(sph(hr * 0.2), c.skin, { at: [s * hr * 0.88, hy - hr * 0.02, -hr * 0.04], sc: [0.5, 1.1, 0.8], r: SK }); // ears
+      S.add(sph(hr * 0.22, 10, 8), c.skin, { at: [s * hr * 0.4, hy + hr * 0.22, hr * 0.84], sc: [1.4, 0.45, 0.7], r: SK }); // brow ridge
+      S.add(sph(hr * 0.15, 10, 8), dark(c.skin, 0.94), { at: [s * hr * 0.4, hy + hr * 0.12, hr * 0.9], sc: [1.2, 0.45, 0.6], r: SK }); // upper eyelids
+      S.add(sph(hr * 0.1, 8, 6), c.skin, { at: [s * hr * 0.09, hy - hr * 0.23, hr * 1.0], r: SK }); // nostril wings
+    });
+    S.add(new THREE.ConeGeometry(hr * 0.12, hr * 0.34, 6), c.skin, { at: [0, hy - hr * 0.12, hr * 0.98], rot: [Math.PI / 2 + 0.3, 0, 0], r: SK }); // nose
+    S.add(sph(hr * 0.075, 8, 6), dark(c.skin, 0.96), { at: [0, hy - hr * 0.2, hr * 1.12], r: SK }); // nose tip
+    const lip = mix(c.skin, 0x9a4a46, 0.5);
+    S.add(sph(hr * 0.17, 10, 8), lip, { at: [0, hy - hr * 0.37, hr * 0.9], sc: [1.6, 0.32, 0.6], r: 0.4 });
+    S.add(sph(hr * 0.17, 10, 8), lip, { at: [0, hy - hr * 0.47, hr * 0.89], sc: [1.4, 0.38, 0.62], r: 0.4 });
+  } else {
+    S.add(sph(hr, 24, 18), c.skin, { at: [0, hy, 0] });
+    [-1, 1].forEach((s) => S.add(sph(hr * 0.2), c.skin, { at: [s * hr * 0.98, hy - hr * 0.02, 0], sc: [0.5, 1, 0.8] }));
+    S.add(sph(hr * 0.09), dark(c.skin, 0.93), { at: [0, hy - hr * 0.1, hr * 0.98] });
+  }
   // eyebrows + mouth
   const bc = dark(c.hair, 0.9);
   const browY = c.face === "wow" ? hy + hr * 0.5 : hy + hr * 0.38;
@@ -278,7 +334,7 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
     S.add(box(hr * 0.36, hr * 0.06, 0.012), bc, { at: [s * hr * 0.42, browY, hr * 0.9], rot: [0, 0, tilt] });
   });
   const mz = hr * 0.93;
-  if (c.face === "smile") S.add(new THREE.TorusGeometry(hr * 0.24, 0.009, 6, 14, Math.PI), 0x7a3f3a, { at: [0, hy - hr * 0.2, mz], rot: [0, 0, Math.PI] });
+  if (c.face === "smile") S.add(new THREE.TorusGeometry(hr * (R ? 0.15 : 0.24), R ? 0.006 : 0.009, 6, 14, Math.PI), 0x7a3f3a, { at: [0, hy - hr * (R ? 0.32 : 0.2), mz + (R ? hr * 0.04 : 0)], rot: [0, 0, Math.PI] });
   else if (c.face === "calm") S.add(box(hr * 0.3, 0.012, 0.01), 0x7a3f3a, { at: [0, hy - hr * 0.42, mz + hr * 0.02] });
   else if (c.face === "wow") S.add(new THREE.TorusGeometry(hr * 0.1, 0.01, 6, 12), 0x7a3f3a, { at: [0, hy - hr * 0.42, mz + hr * 0.03] });
   else S.add(box(hr * 0.34, 0.012, 0.01), 0x7a3f3a, { at: [hr * 0.04, hy - hr * 0.4, mz + hr * 0.02], rot: [0, 0, 0.22] });
@@ -286,36 +342,36 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
   // hair
   const cap = (frac: number, k = 1.08) => new THREE.SphereGeometry(hr * k, 22, 14, 0, Math.PI * 2, 0, Math.PI * frac);
   if (c.hs !== "none") {
-    if (c.hs === "short") S.add(cap(0.5), c.hair, { at: [0, hy + 0.01, 0] });
+    if (c.hs === "short") S.add(cap(0.5), c.hair, { r: HR, at: [0, hy + 0.01, 0] });
     if (c.hs === "long") {
-      S.add(cap(0.62), c.hair, { at: [0, hy + 0.01, 0] });
-      S.add(box(hr * 1.9, hr * 2.3, hr * 0.7), c.hair, { at: [0, hy - hr * 0.55, -hr * 0.7] });
-      [-1, 1].forEach((s) => S.add(box(hr * 0.22, hr * 1.5, hr * 0.7), c.hair, { at: [s * hr * 0.98, hy - hr * 0.35, -hr * 0.2] }));
+      S.add(cap(0.62), c.hair, { r: HR, at: [0, hy + 0.01, 0] });
+      S.add(box(hr * 1.9, hr * 2.3, hr * 0.7), c.hair, { r: HR, at: [0, hy - hr * 0.55, -hr * 0.7] });
+      [-1, 1].forEach((s) => S.add(box(hr * 0.22, hr * 1.5, hr * 0.7), c.hair, { r: HR, at: [s * hr * 0.98, hy - hr * 0.35, -hr * 0.2] }));
     }
     if (c.hs === "bun") {
-      S.add(cap(0.52), c.hair, { at: [0, hy + 0.01, 0] });
-      S.add(sph(hr * 0.5), c.hair, { at: [0, hy + hr * 1.05, -hr * 0.35] });
+      S.add(cap(0.52), c.hair, { r: HR, at: [0, hy + 0.01, 0] });
+      S.add(sph(hr * 0.5), c.hair, { r: HR, at: [0, hy + hr * 1.05, -hr * 0.35] });
     }
     if (c.hs === "spiky") {
-      S.add(cap(0.45), c.hair, { at: [0, hy + 0.01, 0] });
+      S.add(cap(0.45), c.hair, { r: HR, at: [0, hy + 0.01, 0] });
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * Math.PI * 2;
         const px = Math.cos(a) * hr * 0.55, pz = Math.sin(a) * hr * 0.55;
-        S.add(new THREE.ConeGeometry(hr * 0.24, hr * 0.8, 6), c.hair, { at: [px, hy + hr * 1.0, pz], rot: [pz * 1.2, 0, -px * 1.2] });
+        S.add(new THREE.ConeGeometry(hr * 0.24, hr * 0.8, 6), c.hair, { r: HR, at: [px, hy + hr * 1.0, pz], rot: [pz * 1.2, 0, -px * 1.2] });
       }
-      S.add(new THREE.ConeGeometry(hr * 0.26, hr * 0.9, 6), c.hair, { at: [0, hy + hr * 1.12, 0] });
+      S.add(new THREE.ConeGeometry(hr * 0.26, hr * 0.9, 6), c.hair, { r: HR, at: [0, hy + hr * 1.12, 0] });
     }
     if (c.hs === "curly") {
-      S.add(cap(0.5), c.hair, { at: [0, hy + 0.01, 0] });
+      S.add(cap(0.5), c.hair, { r: HR, at: [0, hy + 0.01, 0] });
       for (let i = 0; i < 16; i++) {
         const a = (i / 16) * Math.PI * 2, ring = i % 2 ? 0.75 : 0.45, yy = i % 2 ? 0.78 : 0.98;
-        S.add(sph(hr * 0.3, 8, 6), c.hair, { at: [Math.cos(a) * hr * ring, hy + hr * yy, Math.sin(a) * hr * ring] });
+        S.add(sph(hr * 0.3, 8, 6), c.hair, { r: HR, at: [Math.cos(a) * hr * ring, hy + hr * yy, Math.sin(a) * hr * ring] });
       }
     }
     if (c.hs === "mohawk") {
       S.add(cap(0.32, 1.03), dark(c.hair, 0.6), { at: [0, hy + 0.02, 0] });
       for (let i = -3; i <= 3; i++) {
-        S.add(new THREE.ConeGeometry(hr * 0.16, hr * (0.9 - Math.abs(i) * 0.08), 5), c.hair, { at: [0, hy + hr * 0.95, i * hr * 0.26] });
+        S.add(new THREE.ConeGeometry(hr * 0.16, hr * (0.9 - Math.abs(i) * 0.08), 5), c.hair, { r: HR, at: [0, hy + hr * 0.95, i * hr * 0.26] });
       }
     }
   }
@@ -398,13 +454,16 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
     extras.flames = fl;
   }
 
-  // eyes (separate so they can blink)
+  // eyes (separate so they can blink); iris colour follows the hair so people look consistent
+  const lum = new THREE.Color(c.hair).getHSL({ h: 0, s: 0, l: 0 }).l;
+  const iris = lum > 0.55 ? 0x4a7a9a : lum > 0.3 ? 0x5a7a52 : 0x3b2a1c;
   [-1, 1].forEach((s) => {
     const eg = new THREE.Group();
     eg.position.set(s * hr * 0.4, hy + hr * 0.05, hr * 0.9);
     new Builder()
-      .add(sph(hr * 0.15, 10, 8), 0xffffff, { sc: [1, 1, 0.55], r: 0.3 })
-      .add(sph(hr * 0.085, 8, 6), 0x14110d, { at: [0, 0, hr * 0.06], sc: [1, 1, 0.6], r: 0.2 })
+      .add(sph(hr * (R ? 0.125 : 0.15), 10, 8), R ? 0xf1eeea : 0xffffff, { sc: [R ? 1.15 : 1, R ? 0.82 : 1, 0.55], r: 0.3 })
+      .add(sph(hr * (R ? 0.078 : 0.085), 8, 6), R ? iris : 0x14110d, { at: [0, 0, hr * 0.06], sc: [1, 1, 0.6], r: 0.2 })
+      .add(sph(hr * 0.036, 6, 5), 0x050505, { at: [0, 0, hr * 0.09], sc: [1, 1, 0.5], r: 0.2 })
       .add(sph(hr * 0.03, 6, 5), 0xffffff, { at: [hr * 0.03, hr * 0.03, hr * 0.1], basic: true })
       .into(eg);
     g.add(eg);
