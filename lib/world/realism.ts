@@ -212,7 +212,6 @@ export function makeRealism(renderer: THREE.WebGLRenderer, scene: THREE.Scene) {
     const metal = new THREE.MeshStandardMaterial({ color: 0x151a26, roughness: 0.45, metalness: 0.7 });
     const hw = room.hw + 0.6;
     const zc = (room.z0 + room.z1) / 2;
-    const D = room.z1 - room.z0 + 1.6;
     const W = room.hw * 2 + 1.2;
     owned.push(metal);
 

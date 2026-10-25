@@ -9,7 +9,7 @@ import { makeCup, disposeCup, MENUS } from "@/lib/world/drinks";
  * The crew who live in the worlds: bartenders, dancers and the AI lab team.
  * They are simulated locally from the clock (no network), so everyone sees them doing roughly the same thing.
  */
-export type NpcKind = "bartender" | "dancer" | "scientist" | "tech";
+export type NpcKind = "bartender" | "dancer" | "scientist" | "tech" | "astronaut";
 export interface NpcDef {
   id: string;
   name: string;
@@ -53,6 +53,19 @@ export const NPCS: NpcDef[] = [
     lines: ["These racks train the models. Loud, but worth it.", "The workstations run live demos. Sit down and watch.", "GPU temperature is fine. Mostly."],
   },
 ];
+
+NPCS.push(
+  {
+    id: "vega", name: "Cmdr. Vega", title: "Astronaut", room: "cosmos", kind: "astronaut", x: -4.5, z: -5.5, yaw: PI / 4,
+    cfg: { skin: 0xc68e66, hair: 0x1b1512, hs: "short", fit: "jacket", top: 0xe9edf5, bottom: 0xe9edf5, trim: 0xff8a3d, shoe: 0xb8bcc8, face: "smile", h: 1.02 },
+    lines: ["Welcome aboard the deck. Watch the sky: a comet passes every minute or so.", "Floating never gets old. Ask me anything about space.", "Make a wish when the comet crosses. I always do."],
+  },
+  {
+    id: "kit", name: "Astro Kit", title: "Astronaut", room: "cosmos", kind: "astronaut", x: 4.8, z: 0.5, yaw: -PI / 3,
+    cfg: { skin: 0xf1d0b3, hair: 0xb5651d, hs: "bun", fit: "jacket", top: 0xe9edf5, bottom: 0xe9edf5, trim: 0x6bb5ff, shoe: 0xb8bcc8, face: "wow", h: 0.96, sh: 0.92 },
+    lines: ["No gravity here, but great views.", "Did you know a day on Venus is longer than its year?", "I'm checking the telescope. See that ringed planet?"],
+  }
+);
 
 export const npcById = (id: string) => NPCS.find((n) => n.id === id) || null;
 
@@ -110,6 +123,19 @@ export function addNpcs(scene: THREE.Scene, room: RoomId, col: Collider[]) {
       arms[1].add(cup);
     }
     if (def.kind === "dancer") col.push({ x: def.x, z: def.z, w: 0.45, d: 0.45 });
+    if (def.kind === "astronaut") {
+      const top = g.userData.top as number;
+      const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 14), new THREE.MeshStandardMaterial({ color: 0xcfe8ff, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+      helmet.position.set(0, top - 0.13, 0);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.02, 8, 24), new THREE.MeshStandardMaterial({ color: 0xb8bcc8, roughness: 0.4, metalness: 0.6 }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(0, top - 0.3, 0);
+      const pack = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.46, 0.16), new THREE.MeshStandardMaterial({ color: 0xcdd2de, roughness: 0.5, metalness: 0.3 }));
+      pack.position.set(0, top - 0.62, -0.2);
+      const light = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshBasicMaterial({ color: 0x5ef2c8 }));
+      light.position.set(0.08, top - 0.62, 0.17);
+      g.add(helmet, ring, pack, light);
+    }
     root.add(g);
     return { def, g, ph: i * 1.7, wp: 0, wait: 0, cup, sp };
   });
@@ -148,6 +174,16 @@ export function addNpcs(scene: THREE.Scene, room: RoomId, col: Collider[]) {
         const arms = g.userData.arms as THREE.Group[];
         const eyes = g.userData.eyes as THREE.Object3D[];
         const ph = s.ph;
+        if (def.kind === "astronaut") {
+          // zero gravity: slow drift, a gentle tumble, limbs floating
+          g.position.set(def.x + Math.sin(t * 0.00032 + ph) * 1.4, 0.9 + Math.sin(t * 0.0007 + ph) * 0.25, def.z + Math.cos(t * 0.00027 + ph) * 1.0);
+          g.rotation.set(Math.sin(t * 0.0005 + ph) * 0.16, def.yaw + Math.sin(t * 0.0004 + ph) * 1.1, Math.sin(t * 0.0004 + ph * 2) * 0.14);
+          arms[0].rotation.set(-0.5 + Math.sin(t * 0.0011 + ph) * 0.35, 0, 0.55 + Math.sin(t * 0.0009) * 0.2);
+          arms[1].rotation.set(-0.5 + Math.sin(t * 0.0012 + ph + 1) * 0.35, 0, -0.55 - Math.sin(t * 0.0008) * 0.2);
+          legs[0].rotation.x = 0.25 + Math.sin(t * 0.0008 + ph) * 0.2;
+          legs[1].rotation.x = 0.15 + Math.sin(t * 0.0009 + ph + 2) * 0.2;
+          return;
+        }
         let moving = false;
         let wantYaw = g.rotation.y;
         const dxm = me.x - g.position.x;
