@@ -3,6 +3,7 @@ import type { Collider } from "@/lib/world/lounge";
 import { getRoom, type RoomDef } from "@/lib/world/rooms";
 import type { Mood } from "@/lib/world/scenes";
 import { makeVisualScreen } from "@/lib/world/visualizer";
+import { cometPhase, cometPos } from "@/lib/world/comet";
 
 /* ---------- small helpers ---------- */
 const std = (c: number, r = 0.7, m = 0) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
@@ -294,7 +295,7 @@ function buildParty(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
   [0.5, 2.5, 4.5].forEach((z) => cyl(g, 0.25, 0.25, 0.7, 7.5, 0.35, z, std(0x2a2f3f, 0.4, 0.5), 14));
   // Cinema (west): big screen on the wall and two rows of theatre seats
   const cin = makeBoard("PARTY CINEMA", "Sit down, paste a link and press play.", 0xff5ac8);
-  screen(g, cin.tex, 6.4, 2.4, -(room.hw + 0.6) + 0.12, 2.9, 2.5, Math.PI / 2, 0xff5ac8);
+  screen(g, cin.tex, 5.6, 3.15, -(room.hw + 0.6) + 0.12, 2.9, 2.5, Math.PI / 2, 0xff5ac8);
   const seatM = std(0x6a1f4a, 0.85);
   const rowM = std(0x1a1030, 0.6, 0.4);
   [-6.8, -5.4].forEach((x) => {
@@ -304,7 +305,7 @@ function buildParty(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
       bx(g, 0.5, 0.36, 0.5, x + 0.05, 0.18, z, rowM);
     });
   });
-  bx(g, 0.18, 0.05, 6.4, -(room.hw + 0.6) + 0.35, 0.9, 2.5, glow(0xff5ac8, 0.5)); // glow strip under the screen
+  bx(g, 0.18, 0.05, 5.6, -(room.hw + 0.6) + 0.35, 0.9, 2.5, glow(0xff5ac8, 0.5)); // glow strip under the screen
   // neon sign on the north wall
   const sg = makeBoard("PARTY HALL", "Dance. Chat. Celebrate.", room.color);
   screen(g, sg.tex, 4.6, 1.4, 0, 4.05, s.north + 0.12, 0, room.color);
@@ -714,6 +715,20 @@ function buildCosmos(sc: THREE.Scene, room: RoomDef, _col: Collider[]): RoomCtl 
     g.add(t);
     return t;
   });
+  // comet: crosses the sky every 50 seconds, at the same moment for everyone (driven by the clock)
+  const comet = new THREE.Group();
+  comet.visible = false;
+  g.add(comet);
+  const cHead = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 12), new THREE.MeshBasicMaterial({ color: 0xe8fbff, fog: false }));
+  const cHalo = new THREE.Mesh(new THREE.SphereGeometry(2.2, 16, 12), new THREE.MeshBasicMaterial({ color: 0x6bd8ff, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+  comet.add(cHead, cHalo);
+  const TAIL = 56;
+  const tp = new Float32Array(TAIL * 3);
+  const tg = new THREE.BufferGeometry();
+  tg.setAttribute("position", new THREE.BufferAttribute(tp, 3));
+  const tail = new THREE.Points(tg, new THREE.PointsMaterial({ color: 0x9fe8ff, size: 1.6, transparent: true, opacity: 0.75, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: true }));
+  tail.frustumCulled = false;
+  g.add(tail);
   // benches
   const bench = std(0x1d2240, 0.6, 0.3);
   ([-2.7, 2.7] as const).forEach((x) => {
@@ -731,8 +746,23 @@ function buildCosmos(sc: THREE.Scene, room: RoomDef, _col: Collider[]): RoomCtl 
         f.rotation.y = t * 0.0004 * (i % 2 ? -1 : 1);
       });
       stars.rotation.y = t * 0.00001;
+      const cp = cometPhase(Date.now());
+      comet.visible = tail.visible = cp.k >= 0;
+      if (cp.k >= 0) {
+        const [hx, hy, hz] = cometPos(cp.n, cp.k);
+        comet.position.set(hx, hy, hz);
+        cHalo.scale.setScalar(1 + Math.sin(t * 0.02) * 0.1);
+        for (let i = 0; i < TAIL; i++) {
+          const [px, py, pz] = cometPos(cp.n, Math.max(0, cp.k - i * 0.0028));
+          tp[i * 3] = px + (Math.random() - 0.5) * 0.6 * (i / TAIL);
+          tp[i * 3 + 1] = py + (Math.random() - 0.5) * 0.6 * (i / TAIL);
+          tp[i * 3 + 2] = pz;
+        }
+        (tg.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+      }
     },
     dispose() {
+      tg.dispose();
       sg.dispose();
       belt.dispose();
       disposeTree(sc, g);

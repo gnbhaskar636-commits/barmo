@@ -3,6 +3,31 @@
 Open the site, pick a name and avatar, walk around a shared 3D lounge, and meet people live.
 No sign-up. Real-time uses Supabase Realtime only (no database tables).
 
+## What is new in V1.1
+
+- **New:** achievements (11 goals, +10 tokens each, shown on Profile; `lib/world/achievements.ts`), photo mode (Actions, Take a photo), 10 code lab challenges with a daily one, a cheaper-to-run world.
+- **Speed and mobile:** weak devices start on Low graphics, phones draw fewer pixels, and the world switches itself to Low if it stays under about 26 fps for 8 seconds.
+- **Safety:** Report on a player's card (`/api/report`: logged on the server, and sent to `REPORT_WEBHOOK_URL` if you set a Discord or Slack webhook), plus automatic muting of spammers.
+- **Polish:** cleanups found in an audit of V1.
+
+## What is in V1 (everything, in one release)
+
+- **Big screens that work in every world.** Open Actions, paste a YouTube, Vimeo or direct .mp4/.webm link, press Play: the video plays **on the 3D screen** for everyone in that world, whether they are sitting or standing. A video bar gives each viewer Controls (pause/volume), Hide and Stop. Lounge, Meeting Hall, Party Hall (west wall cinema), AI Lab and Cosmos all have a screen. Code: `lib/world/videoWall.ts`.
+- **AI Lab code lab.** Sit at a workstation, open the *Code lab* tab: six JavaScript challenges (hello, sum, FizzBuzz, sigmoid, one neuron, teach a perceptron the AND gate) that really run, with tests, hints and *Ask Nova to review my code*. Code runs in a sandboxed Web Worker with the network switched off and a 3 second limit. Solving a challenge announces it in chat. Code: `lib/world/codeLab.ts`.
+- **Cosmos specials.** Astronauts (Cmdr. Vega, Astro Kit) float in zero gravity and chat in character. A comet crosses the sky every 50 seconds at the same moment for everyone; Actions shows a countdown and lets you make a wish.
+- **AI crew, Nova assistant, smarter chat, drinks, cinema seats, AI class, music-linked rooms, video meetings, realistic avatars and shadows** from the earlier builds (see the sections below).
+- Login is off (`AUTH_ENABLED` in `lib/config.ts`); everything is saved on the device.
+
+## Build history
+
+### V1.2: smarter chat and AI
+
+- **Talk to the crew with real AI.** Open any NPC (Marco, Lena, Dr. Nova, Ravi, the dancers) and type to them. They answer in character. The personas live on the server (`lib/world/novaKnowledge.ts`), so the browser only sends an id. Without an AI key they still answer from built-in lines.
+- **Nova assistant chat.** The Nova panel is now a conversation that remembers what you said (saved on your device), knows how the whole app works, and offers suggestions that match the world you are in. Share any answer to the room with one tap. Clear it with the bin button.
+- **Smarter world chat.** Reply to a message (↩), react with emoji (☺), translate a message (🌐), see who is typing, @mention people (highlighted, and shown in the ticker), emoji picker, and save the chat as a text file (⬇). Slash commands: `/nova question` (Nova answers in the room), `/me action`, `/roll`.
+- **Crew greets you** with a line as you walk up to them.
+- **Server.** `/api/nova` has new tasks: `chat`, `npc`, `translate`. Rate limit is 24 requests per minute per visitor. Default Anthropic model is `claude-haiku-5-5` (override with `NOVA_MODEL`). Translation needs an AI key; everything else works without one.
+
 ## V1.1: a living world
 
 - **Realistic people.** New avatar builder (switch back in `lib/config.ts`, `AVATAR_REALISTIC`): natural body proportions, flatter torso, jointed arms and legs, hands, a shaped face (jaw, nose, lips, brow, eyelids), natural eyes, matte cloth and soft skin shading. All the same customisation options still work.

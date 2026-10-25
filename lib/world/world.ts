@@ -11,6 +11,8 @@ import { addAmbience } from "@/lib/world/ambience";
 import { makeRealism, shade } from "@/lib/world/realism";
 import { addNpcs } from "@/lib/world/npcs";
 import { disposeCup, drinkById, makeCup } from "@/lib/world/drinks";
+import { addVideoWall, makeVideoOverlay, videoSpec } from "@/lib/world/videoWall";
+import type { VideoSrc } from "@/lib/world/screens";
 import { addConnect, type LinkNode } from "@/lib/world/connect";
 import { addTerrace, onTerrace } from "@/lib/world/terrace";
 import { addSky } from "@/lib/world/sky";
@@ -69,6 +71,8 @@ export interface WorldOptions {
   onContext?: (c: WorldContext | null) => void;
   /** Fired when the user taps an NPC (bartender, dancer, scientist) or presses the Talk button. */
   onNpcClick?: (id: string) => void;
+  /** Graphics quality in use (auto = the world lowered it because the device was struggling). */
+  onQuality?: (q: "high" | "low", auto: boolean) => void;
 }
 
 function webglAvailable(): boolean {
@@ -112,6 +116,14 @@ export interface World {
   setBoard: (text: string) => void;
   /** Hold a drink (id null = me). drinkId null = put it down. */
   setDrink: (id: string | null, drinkId: string | null) => void;
+  /** Play a video on this world's big screen (null = stop). Everyone in the room sees it. */
+  setVideo: (v: VideoSrc | null) => void;
+  /** Let the viewer click the player's own controls (play, pause, volume). */
+  setVideoInteractive: (on: boolean) => void;
+  /** Hide the screen's video for this viewer only (also silences it). */
+  setVideoHidden: (hide: boolean) => void;
+  /** Captures the 3D view as a PNG (the video on the big screen is not included). */
+  snapshot: () => Promise<Blob | null>;
 }
 
 /** Height of a chair seat; a sitting avatar's hips are placed here. */
@@ -323,11 +335,13 @@ export function runWorld(
   if (!webglAvailable()) {
     host.innerHTML =
       '<div class="empty" style="margin:20px">3D is not available in this browser. Turn on hardware acceleration or try a current version of Chrome, Edge, Firefox or Safari.</div>';
-    return { destroy: () => {}, applyPeerState: () => {}, removePeer: () => {}, say: () => {}, emote: () => {}, teleport: () => {}, setTheme: () => {}, burst: () => {}, shout: () => {}, emoteAll: () => {}, interact: () => {}, react: () => {}, setSpeaking: () => {}, setQuality: () => {}, sitNearest: () => false, stand: () => {}, setBoard: () => {}, setDrink: () => {} };
+    return { destroy: () => {}, applyPeerState: () => {}, removePeer: () => {}, say: () => {}, emote: () => {}, teleport: () => {}, setTheme: () => {}, burst: () => {}, shout: () => {}, emoteAll: () => {}, interact: () => {}, react: () => {}, setSpeaking: () => {}, setQuality: () => {}, sitNearest: () => false, stand: () => {}, setBoard: () => {}, setDrink: () => {}, setVideo: () => {}, setVideoInteractive: () => {}, setVideoHidden: () => {}, snapshot: () => Promise.resolve(null) };
   }
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
+  const dprCap = coarse ? 1.5 : 2; // phones draw fewer pixels
+  renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
   host.appendChild(renderer.domElement);
 
   const room = getRoom(opts.room);
@@ -336,10 +350,18 @@ export function runWorld(
   // Glow (bloom) pass: makes neon, holograms and light strips shine. Built lazily; "low" skips it.
   let hq = true;
   try {
-    hq = localStorage.getItem("barmo-gfx") !== "low";
+    const saved = localStorage.getItem("barmo-gfx");
+    if (saved) hq = saved !== "low";
+    else {
+      // first visit: start light on weak devices
+      const nav = navigator as Navigator & { deviceMemory?: number };
+      const cores = navigator.hardwareConcurrency || 8;
+      hq = !((nav.deviceMemory ?? 8) <= 2 || cores <= 2 || (coarse && cores <= 4));
+    }
   } catch {
     /* default high */
   }
+  if (!hq) renderer.setPixelRatio(1);
   let composer: EffectComposer | null = null;
   const scene = new THREE.Scene();
   const col: Collider[] = [];
@@ -430,6 +452,17 @@ export function runWorld(
   let shoutOn = false;
 
   const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 80);
+  // The world's big screen: shared links play right on it for everyone in the room.
+  const vspec = videoSpec(room);
+  let vwall: ReturnType<typeof addVideoWall> | null = null;
+  if (vspec.draw) {
+    try {
+      vwall = addVideoWall(scene, room, vspec);
+    } catch {
+      vwall = null;
+    }
+  }
+  const vover = makeVideoOverlay(host, camera, vspec);
   const me = makeAvatar(opts.myCfg);
   shade(me);
   addRing(me, 0xc8a26b);
@@ -688,11 +721,40 @@ export function runWorld(
 
   const v = new THREE.Vector3();
   let lastSend = 0;
+  let fpsT = 0;
+  let fpsN = 0;
+  let slow = 0;
+  let snapReq: ((b: Blob | null) => void) | null = null;
 
   function loop(t: number) {
     raf = requestAnimationFrame(loop);
-    const dt = Math.min((t - last) / 1000, 0.05);
+    const raw = t - last;
+    const dt = Math.min(raw / 1000, 0.05);
     last = t;
+    // If the device keeps struggling (under ~26 fps for 8 seconds) switch to Low graphics by itself.
+    if (opts.full && raw < 250) {
+      fpsT += raw;
+      fpsN++;
+      if (fpsT > 4000) {
+        const fps = (fpsN * 1000) / fpsT;
+        fpsT = 0;
+        fpsN = 0;
+        slow = hq && fps < 26 ? slow + 1 : 0;
+        if (slow >= 2) {
+          slow = 0;
+          hq = false;
+          realism.apply(false);
+          renderer.setPixelRatio(1);
+          size();
+          try {
+            localStorage.setItem("barmo-gfx", "low");
+          } catch {
+            /* ignore */
+          }
+          opts.onQuality?.("low", true);
+        }
+      }
+    }
 
     if (opts.full) {
       let f = (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1: 0),
@@ -767,6 +829,7 @@ export function runWorld(
         tz = me.position.z - Math.cos(yaw + sw * 0.9) * (camDist + sw * 5);
       camera.position.lerp(v.set(tx, camH + sw * 5.5, tz), Math.min(1, (ip < 1 ? 2.6 : 4) * dt));
       camera.lookAt(me.position.x, 1.2, me.position.z);
+      vover.update();
     } else {
       ang += dt * 0.12;
       camera.position.set(Math.sin(ang) * 13, 5.5, Math.cos(ang) * 9 + 1);
@@ -916,6 +979,15 @@ export function runWorld(
       }
       composer.render(dt);
     } else renderer.render(scene, camera);
+    if (snapReq) {
+      const cb = snapReq;
+      snapReq = null;
+      try {
+        renderer.domElement.toBlob((b) => cb(b), "image/png"); // taken right after drawing, so the canvas is not blank
+      } catch {
+        cb(null);
+      }
+    }
     sky.restore();
     v.set(me.position.x, (me.userData.top as number) + 0.22, me.position.z).project(camera);
     tag.style.left = (v.x * 0.5 + 0.5) * host.clientWidth + "px";
@@ -943,6 +1015,7 @@ export function runWorld(
       pl[i].style.display = v.z < 1 ? "block" : "none";
     });
   }
+  opts.onQuality?.(hq ? "high" : "low", false);
   raf = requestAnimationFrame(loop);
 
   opts.onPeersChanged?.(0);
@@ -958,6 +1031,8 @@ export function runWorld(
       web.dispose();
       ambience?.dispose();
       npcs.dispose();
+      vover.dispose();
+      vwall?.dispose();
       realism.dispose();
       terrace.dispose();
       portals.dispose();
@@ -1079,9 +1154,31 @@ export function runWorld(
     setQuality(q) {
       hq = q === "high";
       realism.apply(hq);
+      renderer.setPixelRatio(hq ? Math.min(devicePixelRatio, dprCap) : 1);
+      size();
+    },
+    snapshot() {
+      return new Promise<Blob | null>((res) => {
+        snapReq = res;
+        window.setTimeout(() => {
+          if (snapReq === res) {
+            snapReq = null;
+            res(null);
+          }
+        }, 1500);
+      });
     },
     setBoard(text) {
       rb?.setBoard?.(text);
+    },
+    setVideo(v) {
+      vover.set(v);
+    },
+    setVideoInteractive(on) {
+      vover.setInteractive(on);
+    },
+    setVideoHidden(h) {
+      vover.setHidden(h);
     },
     setDrink(id, drinkId) {
       const g = id ? peers.get(id)?.group : me;

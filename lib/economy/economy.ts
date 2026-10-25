@@ -112,6 +112,13 @@ export function initEconomy() {
 let busy = false;
 const tried = new Set<string>();
 /** Daily login bonus (+10, once per UTC day). Returns tokens earned. */
+/** Bonus tokens for achievements. Works in local mode (login off); with accounts the server owns the balance. */
+export function grantTokens(n: number) {
+  if (AUTH_ENABLED || n <= 0) return;
+  const l = readLocal();
+  commitLocal({ ...l, tokens: l.tokens + n, earned: l.earned + n });
+}
+
 export async function claimDaily(): Promise<number> {
   if (!AUTH_ENABLED) {
     const l = readLocal();
