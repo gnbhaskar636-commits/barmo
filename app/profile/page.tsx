@@ -10,6 +10,7 @@ import AvatarStudio, { type StudioValue } from "@/components/app/AvatarStudio";
 import { hex } from "@/lib/world/avatar";
 import { setSound, soundOn } from "@/lib/sound";
 import AccountCard from "@/components/account/AccountCard";
+import { ACHIEVEMENTS, loadAchievements } from "@/lib/world/achievements";
 import { COMM_STYLES, OPEN_TO, STATUSES } from "@/lib/social/store";
 import { levelOf, levelTitle } from "@/lib/social/quests";
 
@@ -18,6 +19,8 @@ function Mine() {
   const toast = useToast();
   const h = useHub();
   const me = h.me!;
+  const [ach, setAch] = useState<string[]>([]);
+  useEffect(() => setAch(loadAchievements()), []);
   const [name, setName] = useState(me.name);
   const [studio, setStudio] = useState<StudioValue>({ av: me.av, acc: me.acc || "none", top: me.top, look: me.look || {} });
   const av = studio.av;
@@ -109,6 +112,15 @@ function Mine() {
           {askMe && <div className="pv-line"><span>Ask me about</span>{askMe}</div>}
           <div className="chips">{tagList.map((t) => <span key={t} className="chip">{t}</span>)}</div>
           <p className="hint">Your profile is shown to people who are online with you. Friends keep a copy so they can find you again.</p>
+          <h3>Achievements · {ach.length} of {ACHIEVEMENTS.length}</h3>
+          <div className="achgrid">
+            {ACHIEVEMENTS.map((a) => (
+              <div key={a.id} className={"ach" + (ach.includes(a.id) ? " on" : "")} title={a.desc}>
+                <span className="ai">{ach.includes(a.id) ? a.icon : "🔒"}</span>
+                <span><b>{a.title}</b><small>{a.desc}</small></span>
+              </div>
+            ))}
+          </div>
           <h3>Account</h3>
           <AccountCard />
           <h3>Sound</h3>

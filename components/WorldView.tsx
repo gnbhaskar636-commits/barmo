@@ -11,10 +11,15 @@ import { createVoice, type VoiceCtl, type VoiceState } from "@/lib/world/voice";
 import { createLiveKitVoice, LiveKitUnavailable } from "@/lib/world/livekitVoice";
 import { useHub } from "@/components/HubProvider";
 import MeetPanel from "@/components/MeetPanel";
-import ScreenPanel, { type CinemaState, type ClassState } from "@/components/ScreenPanel";
+import ScreenPanel, { LinkBox, type CinemaState, type ClassState } from "@/components/ScreenPanel";
 import { npcById } from "@/lib/world/npcs";
 import { MENUS, drinkById } from "@/lib/world/drinks";
 import { LESSONS, parseVideoUrl } from "@/lib/world/screens";
+import { cometPhase, type CometPhase } from "@/lib/world/comet";
+import { ACH_REWARD, unlock, visitWorld } from "@/lib/world/achievements";
+import { loadSolved } from "@/lib/world/codeLab";
+import { grantTokens } from "@/lib/economy/economy";
+import { npcLocal } from "@/lib/world/novaKnowledge";
 import { sceneFor } from "@/lib/world/scenes";
 import { useToast } from "@/components/Toast";
 import { Dot } from "@/components/app/Avatar";
@@ -33,8 +38,23 @@ const pollText = (p: Poll) => {
   Object.values(p.votes).forEach((v) => c[v]++);
   return `📊 ${p.q.slice(0, 70)} · 👍 ${c[0]} · 👎 ${c[1]} · 🤔 ${c[2]}`;
 };
+interface ChatMsg { mid: string; who: string; text: string; me?: boolean; tag?: string; reply?: { who: string; text: string }; reacts?: Record<string, string[]>; mention?: boolean }
+interface Turn { r: "u" | "n"; t: string }
+const CHAT_EMOJI = ["👍", "❤️", "😂", "😮", "🎉"];
+const QUICK_EMOJI = ["😀", "😂", "🔥", "👏", "🎉", "❤️", "👍", "🤔"];
+const rid = () => Math.random().toString(36).slice(2, 10);
+const NOVA_CHIPS: Record<string, string[]> = {
+  lounge: ["What can I do in the Lounge?", "How do I order a drink?"],
+  meeting: ["How do I start a video meeting?", "Plan a 10-minute meeting agenda"],
+  party: ["How do we watch a video together?", "How do I change the music?"],
+  lab: ["Explain neural networks simply", "How does the AI class work?"],
+  cosmos: ["What is there to do in Cosmos?", "Suggest a calm thing to do"],
+};
+
 type Api = {
-  chat: (t: string) => void;
+  chat: (t: string, reply?: { who: string; text: string }) => void;
+  reactMsg: (mid: string, e: string) => void;
+  typing: () => void;
   emote: (e: string) => void;
   go: (id: string) => void;
   drop: (sid: string) => void;
@@ -53,6 +73,8 @@ type Api = {
   drink: (d: string | null) => void;
   screen: (url: string | null) => void;
   klass: (l: number, s: number) => void;
+  video: (kind: "interactive" | "hidden", on: boolean) => void;
+  snapshot: () => Promise<Blob | null>;
 };
 
 const DOCK: { k: Exclude<Panel, null | "orb" | "nova">; icon: string; label: string }[] = [
@@ -69,6 +91,13 @@ export default function WorldView() {
   const sp = useSearchParams();
   const hub = useHub();
   const toast = useToast();
+  /** Unlocks an achievement once, with a small token reward. */
+  const award = (id: string) => {
+    const a = unlock(id);
+    if (!a) return;
+    grantTokens(ACH_REWARD);
+    toast(`🏆 ${a.icon} ${a.title}: ${a.desc} (+${ACH_REWARD} tokens)`);
+  };
   const hubRef = useRef(hub);
   hubRef.current = hub;
   const name = (sp.get("name") || hub.me?.name || "Guest").trim().slice(0, 20) || "Guest";
@@ -136,7 +165,26 @@ export default function WorldView() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState("Connecting…");
   const [people, setPeople] = useState<string[]>([]);
-  const [msgs, setMsgs] = useState<{ who: string; text: string; me?: boolean; tag?: string }[]>([]);
+  const [msgs, setMsgs] = useState<ChatMsg[]>([]);
+  const [replyTo, setReplyTo] = useState<{ who: string; text: string } | null>(null);
+  const [typers, setTypers] = useState<Record<string, number>>({});
+  const [trans, setTrans] = useState<Record<string, string>>({});
+  const [pickFor, setPickFor] = useState<string | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const lastTyping = useRef(0);
+  const uidRef = useRef("");
+  const [novaThread, setNovaThread] = useState<Turn[]>([]);
+  const novaLogRef = useRef<HTMLDivElement>(null);
+  const [npcThread, setNpcThread] = useState<Turn[]>([]);
+  const [npcQ, setNpcQ] = useState("");
+  const [npcBusy, setNpcBusy] = useState(false);
+  const [reportFor, setReportFor] = useState<string | null>(null);
+  const [repReason, setRepReason] = useState("");
+  const [repNote, setRepNote] = useState("");
+  const [flash, setFlash] = useState(false);
+  const [vHide, setVHide] = useState(false);
+  const [vCtl, setVCtl] = useState(false);
+  const [comet, setComet] = useState<CometPhase | null>(null);
   const [text, setText] = useState("");
   const api = useRef<Api | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -176,6 +224,8 @@ export default function WorldView() {
     setHolding(null);
     setCinema(null);
     cinemaRef.current = null;
+    setVHide(false);
+    setVCtl(false);
     setKlass(null);
     klassRef.current = null;
     setHuddle(null);
@@ -193,6 +243,20 @@ export default function WorldView() {
     // One id PER TAB: the same person in two tabs/devices must still see each other.
     // The part before "~" is the stable account id used for friends, blocking and profiles.
     const uid = (getUid() || crypto.randomUUID()) + "~" + Math.random().toString(36).slice(2, 8);
+    uidRef.current = uid;
+    const greeted = new Set<string>();
+    const spam = new Map<string, { t: number[]; last: string; rep: number }>();
+    /** Many messages in a few seconds, or the same message again and again, counts as spam. */
+    const isSpam = (id: string, text: string) => {
+      const now = Date.now();
+      const e = spam.get(id) || { t: [], last: "", rep: 0 };
+      e.t = e.t.filter((x) => now - x < 5000);
+      e.t.push(now);
+      e.rep = text === e.last ? e.rep + 1 : 0;
+      e.last = text;
+      spam.set(id, e);
+      return e.t.length >= 6 || e.rep >= 3;
+    };
     const sidOf = (id: string) => id.split("~")[0];
     let moved = false;
     const vis = new Set<string>();
@@ -207,6 +271,10 @@ export default function WorldView() {
     let voiceCtl: VoiceCtl | null = null;
     const world = runWorld(hostRef.current, {
       full: true,
+      onQuality: (q, auto) => {
+        setGfx(q);
+        if (auto) toast("Switched to Low graphics so it runs smoother. You can change this in the menu.");
+      },
       room,
       spawn: spawnFor(room, fromRoom.current),
       myName: name,
@@ -235,7 +303,10 @@ export default function WorldView() {
         const d = npcById(id);
         if (!d) return;
         setPanel(null);
-        setNpc(id);
+        setNpc((cur) => {
+          if (cur !== id) setNpcThread([]);
+          return id;
+        });
         setNpcLine(d.lines[Math.floor(Math.random() * d.lines.length)]);
       },
       onPortal: (to) => travelRef.current(to),
@@ -251,6 +322,11 @@ export default function WorldView() {
       onContext: (c) => {
         setCtx(c);
         if (c?.kind === "stand") hubRef.current.complete("sit");
+        if (c?.kind === "talk" && c.npc && !greeted.has(c.npc)) {
+          greeted.add(c.npc);
+          const d = npcById(c.npc);
+          if (d) push(d.name, d.lines[0]);
+        }
       },
     });
     const refresh = () => {
@@ -262,11 +338,25 @@ export default function WorldView() {
       if (m) world.applyPeerState(id, m.name, m.cfg, last.get(id) ?? { x: rd.spawn.x, z: rd.spawn.z, yaw: 0 }, m.gear, m.headline);
     };
 
-    const push = (who: string, t: string, me = false, tag?: string) => {
-      setMsgs((m) => [...m.slice(-49), { who, text: t, me, tag }]);
+    const toggleReact = (mid: string, e: string, by: string) =>
+      setMsgs((ms) =>
+        ms.map((m) => {
+          if (m.mid !== mid) return m;
+          const r = { ...(m.reacts || {}) };
+          const cur = r[e] || [];
+          const next = cur.includes(by) ? cur.filter((x) => x !== by) : [...cur, by].slice(0, 50);
+          if (next.length) r[e] = next;
+          else delete r[e];
+          return { ...m, reacts: r };
+        })
+      );
+    const push = (who: string, t: string, me = false, tag?: string, extra?: { mid?: string; reply?: { who: string; text: string } }) => {
+      const first = name.trim().split(/\s+/)[0].toLowerCase();
+      const mention = !me && ((first.length > 0 && t.toLowerCase().includes("@" + first)) || extra?.reply?.who === name);
+      setMsgs((m) => [...m.slice(-49), { mid: extra?.mid || rid(), who, text: t, me, tag, reply: extra?.reply, mention }]);
       if (!me && panelRef.current !== "chat") {
         setUnread((u) => u + 1);
-        setTicker({ who, text: t });
+        setTicker({ who, text: mention ? "mentioned you: " + t : t });
         window.clearTimeout(tickerTimer.current);
         tickerTimer.current = window.setTimeout(() => setTicker(null), 5000);
       }
@@ -327,23 +417,26 @@ export default function WorldView() {
         const d = m.d === null ? null : drinkById(m.d);
         if (m.d !== null && !d) return;
         world.setDrink(fromId, d ? d.id : null);
-      } else if (m.k === "screen" && room === "party") {
+      } else if (m.k === "screen") {
         if (muted) return;
         if (m.url === null) {
           cinemaRef.current = null;
           setCinema(null);
-          world.setBoard("Cinema is idle. Sit down, paste a link and press play.");
-          if (!self) push(who, "🎬 stopped the cinema");
+          world.setVideo(null);
+          if (room === "party") world.setBoard("Cinema is idle. Sit down, paste a link and press play.");
+          if (!self) push(who, "📺 stopped the big screen");
           return;
         }
-        const v = parseVideoUrl(m.url);
-        if (!v || typeof m.url !== "string") return;
+        const v0 = parseVideoUrl(m.url);
+        if (!v0 || typeof m.url !== "string") return;
         const since = typeof m.since === "number" && isFinite(m.since) && Math.abs(Date.now() - m.since) < 6 * 3600_000 ? m.since : Date.now();
-        const c = { url: m.url.trim(), label: v.label, by: who, since };
+        const c = { url: m.url.trim(), label: v0.label, by: who, since };
         cinemaRef.current = c;
         setCinema(c);
-        world.setBoard(`NOW SHOWING: ${v.label} (started by ${who})`);
-        if (!self) push(who, "🎬 started a video in the cinema");
+        const v = parseVideoUrl(c.url, (Date.now() - since) / 1000);
+        world.setVideo(v);
+        if (room === "party") world.setBoard(`NOW SHOWING: ${v0.label} (started by ${who})`);
+        if (!self) push(who, "📺 put a video on the big screen");
       } else if (m.k === "class" && room === "lab") {
         const l = Number(m.l);
         const sl = Number(m.s);
@@ -362,6 +455,7 @@ export default function WorldView() {
     };
     api.current = {
       orb: (m) => {
+        if (m.k === "music" && m.track) award("dj");
         applyOrb(m, null);
         channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, ...m } });
         hubRef.current.complete("orb");
@@ -372,9 +466,18 @@ export default function WorldView() {
         channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, ...msg } });
       },
       screen: (url) => {
+        if (url) award("cinema");
         const msg = { k: "screen", url, since: Date.now() };
         applyOrb(msg, null);
         channel?.send({ type: "broadcast", event: "orb", payload: { id: uid, ...msg } });
+      },
+      video: (kind, on) => {
+        if (kind === "interactive") world.setVideoInteractive(on);
+        else {
+          world.setVideoHidden(on);
+          const c = cinemaRef.current;
+          if (!on && c) world.setVideo(parseVideoUrl(c.url, (Date.now() - c.since) / 1000));
+        }
       },
       klass: (l, s2) => {
         const msg = { k: "class", l, s: s2 };
@@ -395,11 +498,20 @@ export default function WorldView() {
         const s = last.get(id);
         if (s) world.teleport(s.x + 1, s.z + 1);
       },
-      chat: (t) => {
+      chat: (t, reply) => {
         const hd = huddleRef.current;
+        const mid = rid();
         world.say(null, t);
-        push(name, t, true, hd?.name);
-        channel?.send({ type: "broadcast", event: "chat", payload: { id: uid, text: t, h: hd?.id } });
+        push(name, t, true, hd?.name, { mid, reply });
+        channel?.send({ type: "broadcast", event: "chat", payload: { id: uid, text: t, h: hd?.id, mid, rt: reply ? { who: reply.who.slice(0, 20), text: reply.text.slice(0, 80) } : undefined } });
+      },
+      reactMsg: (mid, e) => {
+        if (!CHAT_EMOJI.includes(e)) return;
+        toggleReact(mid, e, uid);
+        channel?.send({ type: "broadcast", event: "chatx", payload: { id: uid, k: "react", mid, e } });
+      },
+      typing: () => {
+        channel?.send({ type: "broadcast", event: "chatx", payload: { id: uid, k: "typing" } });
       },
       drop: (sid) => {
         [...metas.keys()].filter((k) => sidOf(k) === sid).forEach((k) => {
@@ -431,6 +543,7 @@ export default function WorldView() {
       },
       vote: (c) => api.current?.orb({ k: "vote", c }),
       quality: (q) => world.setQuality(q),
+      snapshot: () => world.snapshot(),
       voiceStart: async (h) => {
         if (!voiceCtl) return;
         await voiceCtl.start(h);
@@ -510,14 +623,30 @@ export default function WorldView() {
           last.set(id, s);
           show(id);
         },
-        onChat: (id, t, hid) => {
+        onChatX: (id, m) => {
+          if (id === uid || !metas.has(id)) return;
+          if (hubRef.current.muted.includes(sidOf(id)) || hubRef.current.blocked.includes(sidOf(id))) return;
+          if (m.k === "react" && m.mid && m.e && CHAT_EMOJI.includes(m.e)) toggleReact(m.mid, m.e, id);
+          else if (m.k === "typing") setTypers((t) => ({ ...t, [id]: Date.now() }));
+        },
+        onChat: (id, t, hid, x) => {
           if (id === uid || !metas.has(id)) return;
           // Private circle talk is only for people standing in that same circle.
           if (hid && huddleRef.current?.id !== hid) return;
           if (hubRef.current.muted.includes(sidOf(id)) || hubRef.current.blocked.includes(sidOf(id))) return;
+          if (isSpam(id, t)) {
+            hubRef.current.mute(sidOf(id));
+            toast(`Muted ${metas.get(id)?.name || "someone"} for spamming. You can unmute them in Profile.`);
+            return;
+          }
           world.say(id, t);
           play("pop");
-          push(metas.get(id)!.name, t, false, hid ? huddleRef.current?.name : undefined);
+          push(metas.get(id)!.name, t, false, hid ? huddleRef.current?.name : undefined, { mid: x?.mid, reply: x?.rt });
+          setTypers((tp) => {
+            const { [id]: _gone, ...rest } = tp;
+            void _gone;
+            return rest;
+          });
         },
         onOrb: (id, m) => {
           if (id === uid || !metas.has(id)) return;
@@ -560,16 +689,176 @@ export default function WorldView() {
     if (panel === "chat") {
       setUnread(0);
       setTicker(null);
+      const i = window.setInterval(() => setTypers((t) => (Object.keys(t).some((k) => Date.now() - t[k] > 3500) ? Object.fromEntries((Object.entries(t) as [string, number][]).filter(([, v]) => Date.now() - v <= 3500)) : t)), 1000);
+      return () => window.clearInterval(i);
     }
   }, [panel]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("barmo-nova-thread");
+      if (raw) {
+        const a = JSON.parse(raw) as Turn[];
+        if (Array.isArray(a)) setNovaThread(a.filter((x) => x && (x.r === "u" || x.r === "n") && typeof x.t === "string").slice(-24));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    // visiting all five worlds unlocks Explorer
+    const a = visitWorld(room);
+    if (a) {
+      grantTokens(ACH_REWARD);
+      toast(`🏆 ${a.icon} ${a.title}: ${a.desc} (+${ACH_REWARD} tokens)`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+  useEffect(() => {
+    if (room !== "cosmos") {
+      setComet(null);
+      return;
+    }
+    let was = -1;
+    const tick = () => {
+      const c = cometPhase(Date.now());
+      setComet(c);
+      if (c.k >= 0 && was < 0) toast("☄️ A comet is crossing the sky. Make a wish!");
+      was = c.k;
+    };
+    tick();
+    const i = window.setInterval(tick, 1000);
+    return () => window.clearInterval(i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("barmo-nova-thread", JSON.stringify(novaThread.slice(-24)));
+    } catch {
+      /* ignore */
+    }
+    novaLogRef.current?.scrollTo(0, novaLogRef.current.scrollHeight);
+  }, [novaThread, panel]);
 
   const submit = () => {
     const t = text.trim().slice(0, 200);
     if (!t || Date.now() - lastSent.current < 700) return;
     lastSent.current = Date.now();
-    api.current?.chat(t);
-    hub.complete("chat");
     setText("");
+    setEmojiOpen(false);
+    if (t === "/roll") return roll();
+    if (t.startsWith("/me ")) return void api.current?.chat(`* ${name} ${t.slice(4).trim()}`);
+    if (t.startsWith("/nova ")) return void slashNova(t.slice(6).trim());
+    api.current?.chat(t, replyTo || undefined);
+    setReplyTo(null);
+    hub.complete("chat");
+    award("first_chat");
+  };
+  const onType = (v: string) => {
+    setText(v);
+    if (v && Date.now() - lastTyping.current > 2000) {
+      lastTyping.current = Date.now();
+      api.current?.typing();
+    }
+  };
+  /** /nova question: Nova answers in the room so everyone sees it. */
+  const slashNova = async (q: string) => {
+    if (!q) return;
+    toast("Asking Nova…");
+    let out = "";
+    try {
+      const r = await fetch("/api/nova", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: "chat", text: q, where: def.name }) });
+      const j = (await r.json()) as { text?: string };
+      out = (j.text || "").replace(/\s+/g, " ").slice(0, 190);
+    } catch {
+      /* fall through */
+    }
+    api.current?.chat("🤖 Nova: " + (out || "I could not answer that right now."));
+  };
+  const translateMsg = async (m: ChatMsg) => {
+    if (trans[m.mid]) {
+      setTrans((t) => {
+        const { [m.mid]: _x, ...rest } = t;
+        void _x;
+        return rest;
+      });
+      return;
+    }
+    setTrans((t) => ({ ...t, [m.mid]: "Translating…" }));
+    let out = "Could not translate right now.";
+    try {
+      const r = await fetch("/api/nova", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: "translate", text: m.text, lang: navigator.language || "English" }) });
+      const j = (await r.json()) as { text?: string; source?: string };
+      if (j.text) out = j.text;
+    } catch {
+      /* keep default */
+    }
+    setTrans((t) => ({ ...t, [m.mid]: out }));
+  };
+  const saveChat = () => {
+    if (!msgs.length) return toast("Nothing to save yet");
+    const body = `BARMO chat · ${def.name} · ${new Date().toLocaleString()}\n\n` + msgs.map((m) => `${m.who}: ${m.text}`).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
+    a.download = "barmo-chat.txt";
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  const takePhoto = async () => {
+    const blob = await api.current?.snapshot();
+    if (!blob) return toast("Could not take the photo. Try again.");
+    setFlash(true);
+    window.setTimeout(() => setFlash(false), 220);
+    try {
+      const bmp = await createImageBitmap(blob);
+      const cv = document.createElement("canvas");
+      cv.width = bmp.width;
+      cv.height = bmp.height;
+      const cx = cv.getContext("2d");
+      if (!cx) throw new Error("no canvas");
+      cx.drawImage(bmp, 0, 0);
+      const pad = Math.round(bmp.width * 0.015);
+      cx.font = `600 ${Math.max(14, Math.round(bmp.width * 0.022))}px system-ui, sans-serif`;
+      cx.textAlign = "right";
+      cx.fillStyle = "rgba(0,0,0,0.45)";
+      cx.fillText(`BARMO · ${def.name}`, bmp.width - pad + 1, bmp.height - pad + 1);
+      cx.fillStyle = "rgba(255,255,255,0.92)";
+      cx.fillText(`BARMO · ${def.name}`, bmp.width - pad, bmp.height - pad);
+      cv.toBlob((b) => {
+        if (!b) return;
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(b);
+        a.download = `barmo-${room}-${Date.now()}.png`;
+        a.click();
+        window.setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+      }, "image/png");
+      award("photo");
+      toast("📸 Photo saved");
+    } catch {
+      toast("Could not save the photo");
+    }
+  };
+  const wish = () => {
+    if (comet && comet.k >= 0) award("wish");
+    api.current?.chat(comet && comet.k >= 0 ? `☄️✨ ${name} made a wish on the comet` : `✨ ${name} is waiting for the next comet`);
+  };
+  const talkNpc = async (preset?: string) => {
+    const d = npc ? npcById(npc) : null;
+    const q = (preset ?? npcQ).trim();
+    if (!d || !q || npcBusy) return;
+    const hist = npcThread.slice(-6);
+    if (preset === undefined) setNpcQ("");
+    setNpcThread((h) => [...h, { r: "u", t: q }]);
+    setNpcBusy(true);
+    let out = "";
+    try {
+      const r = await fetch("/api/nova", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: "npc", npc: d.id, text: q, history: hist }) });
+      const j = (await r.json()) as { text?: string };
+      out = j.text || "";
+    } catch {
+      /* fall back below */
+    }
+    setNpcThread((h) => [...h, { r: "n", t: out || npcLocal(d.id, q) }]);
+    setNpcBusy(false);
   };
 
   const act = (t: string) => api.current?.chat(t);
@@ -619,14 +908,24 @@ export default function WorldView() {
   };
   const askNova = async (task: "icebreaker" | "summary" | "improve" | "ask", text = "", lines: string[] = []) => {
     setPanel("nova");
+    const label = task === "summary" ? "Summarize our chat" : task === "icebreaker" ? "Give me an icebreaker" : task === "improve" ? "Improve my idea: " + text : text;
+    const hist = novaThread.slice(-8);
+    setNovaThread((h) => [...h, { r: "u" as const, t: label.slice(0, 400) }].slice(-24));
     setNova({ busy: true, out: null });
+    let out = "";
     try {
-      const r = await fetch("/api/nova", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task, text, lines }) });
+      const r = await fetch("/api/nova", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: task === "ask" ? "chat" : task, text, lines, history: task === "ask" ? hist : undefined, where: def.name }),
+      });
       const j = (await r.json()) as { text?: string; error?: string };
-      setNova({ busy: false, out: j.text || j.error || "Nova is quiet right now. Try again." });
+      out = j.text || j.error || "Nova is quiet right now. Try again.";
     } catch {
-      setNova({ busy: false, out: "Could not reach Nova. Check your connection and try again." });
+      out = "Could not reach Nova. Check your connection and try again.";
     }
+    setNovaThread((h) => [...h, { r: "n" as const, t: out }].slice(-24));
+    setNova({ busy: false, out });
   };
   const novaIcebreaker = () => {
     const mineTags = [...(hub.me?.interests || []), ...(hub.me?.openTo || [])];
@@ -707,11 +1006,20 @@ export default function WorldView() {
           <span className="np-t"><b>{TRACKS.find((t) => t.id === track)?.name || "Music"}</b><small>{sceneFor(track)?.vibe || "Now playing"}</small></span>
         </button>
       )}
+      {flash && <div className="photoflash" aria-hidden="true" />}
+      {cinema && (
+        <div className="cinebar" role="group" aria-label="Big screen">
+          <span className="cb-t">📺 <b>{cinema.label}</b> · {cinema.by}</span>
+          <button className={vCtl ? "on" : ""} aria-pressed={vCtl} onClick={() => { api.current?.video("interactive", !vCtl); setVCtl(!vCtl); }}>🖱️ Controls</button>
+          <button className={vHide ? "on" : ""} aria-pressed={vHide} onClick={() => { api.current?.video("hidden", !vHide); setVHide(!vHide); }}>{vHide ? "👁 Show" : "🙈 Hide"}</button>
+          <button onClick={() => api.current?.screen(null)} aria-label="Stop the big screen for everyone">■</button>
+        </div>
+      )}
       {room === "party" && ctx?.kind === "stand" && ctx.seat?.startsWith("c") && (
         <ScreenPanel mode="cinema" cinema={cinema} klass={null} onPlay={(u) => api.current?.screen(u)} onSlide={() => {}} />
       )}
       {room === "lab" && ctx?.kind === "stand" && ctx.seat?.startsWith("d") && (
-        <ScreenPanel mode="class" cinema={null} klass={klass} onPlay={() => {}} onSlide={(l, s2) => api.current?.klass(l, s2)} />
+        <ScreenPanel mode="class" cinema={null} klass={klass} onPlay={() => {}} onSlide={(l, s2) => api.current?.klass(l, s2)} onSolved={(title) => { api.current?.chat(`💻 ${name} solved “${title}” in the Code lab 🎉`); award("coder"); if (loadSolved().length >= 3) award("coder3"); }} />
       )}
       {npc && !panel && (() => {
         const d = npcById(npc);
@@ -721,6 +1029,13 @@ export default function WorldView() {
           <div className="sheet npcsheet" role="dialog" aria-label={"Talk to " + d.name}>
             <div className="sh"><b>{d.name} <span className="nm">· {d.title}</span></b><button className="x2" onClick={() => setNpc(null)} aria-label="Close">×</button></div>
             <div className="nl">{npcLine}</div>
+            {npcThread.slice(-4).map((m, i) => <div key={i} className={m.r === "u" ? "nb me" : "nb"}>{m.t}</div>)}
+            {npcBusy && <div className="nb thinking">{d.name} is thinking…</div>}
+            <div className="send">
+              <input className="inp" maxLength={200} placeholder={"Say something to " + d.name + "…"} value={npcQ} onChange={(e) => setNpcQ(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && void talkNpc()} />
+              <button className="btn sm" disabled={!npcQ.trim() || npcBusy} onClick={() => void talkNpc()}>Say</button>
+            </div>
             {menu && (
               <>
                 <div className="lbl">Menu (all zero-alcohol){holding ? " · you are holding a " + (drinkById(holding)?.n || "drink").toLowerCase() : ""}</div>
@@ -728,6 +1043,7 @@ export default function WorldView() {
                   {menu.map((x) => (
                     <button key={x.id} className={"chip" + (holding === x.id ? " on" : "")} onClick={() => {
                       api.current?.drink(x.id);
+                      award("first_drink");
                       setHolding(x.id);
                       setNpcLine(x.line);
                       window.clearTimeout(holdTimer.current);
@@ -747,13 +1063,20 @@ export default function WorldView() {
             )}
             {d.kind === "scientist" && (
               <div className="acts">
-                <button className="btn sm" onClick={() => { api.current?.klass(0, 0); setNpcLine("Class is starting. Sit at a workstation on the east side to follow along."); }}>🎓 Start an AI class</button>
+                <button className="btn sm" onClick={() => { api.current?.klass(0, 0); award("class"); setNpcLine("Class is starting. Sit at a workstation on the east side to follow along."); }}>🎓 Start an AI class</button>
                 <button className="btn g sm" onClick={() => { setNpc(null); setPanel("nova"); }}>🤖 Ask Nova anything</button>
               </div>
             )}
             {d.kind === "tech" && (
               <div className="acts">
                 <button className="btn g sm" onClick={() => setNpcLine("Sit at any workstation: the screens show a model training live, and you can join the class from there.")}>🖥️ What are those screens?</button>
+                <button className="btn sm" onClick={() => setNpcLine("Sit at a workstation on the east side, then open the Code lab tab. Write real JavaScript, press Run, and the tests tell you if it works.")}>💻 Where do I code?</button>
+              </div>
+            )}
+            {d.kind === "astronaut" && (
+              <div className="acts">
+                <button className="btn sm" disabled={npcBusy} onClick={() => void talkNpc("Tell me one surprising space fact.")}>🌠 Tell me a space fact</button>
+                <button className="btn g sm" onClick={wish}>✨ Make a wish on the comet</button>
               </div>
             )}
             <div className="acts"><button className="btn g sm" onClick={() => setNpcLine(d.lines[Math.floor(Math.random() * d.lines.length)])}>💬 Chat</button></div>
@@ -761,7 +1084,7 @@ export default function WorldView() {
         );
       })()}
       {room === "meeting" && ctx?.kind === "stand" && (
-        <MeetPanel name={name} blocked={hub.blocked} muted={hub.muted} onJoin={() => api.current?.voiceStop()} />
+        <MeetPanel name={name} blocked={hub.blocked} muted={hub.muted} onJoin={() => { api.current?.voiceStop(); award("meeting"); }} />
       )}
       {ticker && panel !== "chat" && (
         <button className="ticker" onClick={() => setPanel("chat")}><b>{ticker.who}</b> {ticker.text.slice(0, 80)}</button>
@@ -781,27 +1104,33 @@ export default function WorldView() {
 
       {panel === "nova" && (
         <div className="sheet novasheet" role="dialog" aria-label="Nova AI">
-          <div className="sh"><b>🤖 Nova · your AI helper</b><button className="x2" onClick={() => setPanel(null)} aria-label="Close">×</button></div>
-          <div className="acts">
-            <button className="btn g sm" onClick={novaIcebreaker}>🧊 Icebreaker</button>
-            <button className="btn g sm" onClick={() => askNova("summary", "", msgs.slice(-30).map((m) => `${m.who}: ${m.text}`))}>📝 Summarize chat</button>
+          <div className="sh"><b>🤖 Nova · your AI guide</b><span className="shbtns"><button className="x2" onClick={() => { setNovaThread([]); setNova({ busy: false, out: null }); }} aria-label="Clear the conversation" title="Clear conversation">🗑</button><button className="x2" onClick={() => setPanel(null)} aria-label="Close">×</button></span></div>
+          <div className="log novalog" ref={novaLogRef}>
+            {novaThread.length === 0 && <span className="hint">Hi, I'm Nova. Ask me how anything works here, get an icebreaker, or test an idea. I remember our conversation.</span>}
+            {novaThread.map((m, i) => (
+              <div key={i} className={m.r === "u" ? "nb me" : "nb"}>
+                {m.t}
+                {m.r === "n" && (
+                  <span className="macts">
+                    <button aria-label="Share to the room" title="Share to the room" onClick={() => { act("🤖 Nova: " + m.t.replace(/\s+/g, " ").slice(0, 180)); setPanel("chat"); }}>📣</button>
+                    <button aria-label="Copy" title="Copy" onClick={async () => { try { await navigator.clipboard.writeText(m.t); toast("Copied"); } catch { toast("Could not copy"); } }}>⧉</button>
+                  </span>
+                )}
+              </div>
+            ))}
+            {nova.busy && <div className="nb thinking">Nova is thinking…</div>}
+          </div>
+          <div className="chips">
+            {(NOVA_CHIPS[room] || []).map((q) => <button key={q} className="chip" disabled={nova.busy} onClick={() => askNova("ask", q)}>{q}</button>)}
+            <button className="chip" disabled={nova.busy} onClick={novaIcebreaker}>🧊 Icebreaker</button>
+            <button className="chip" disabled={nova.busy} onClick={() => askNova("summary", "", msgs.slice(-30).map((m) => `${m.who}: ${m.text}`))}>📝 Summarize chat</button>
           </div>
           <div className="send">
-            <input className="inp" maxLength={300} placeholder="Ask Nova, or paste an idea…" value={novaQ} onChange={(e) => setNovaQ(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && novaQ.trim() && askNova("ask", novaQ)} />
-            <button className="btn sm" disabled={!novaQ.trim() || nova.busy} onClick={() => askNova("ask", novaQ)}>Ask</button>
+            <input className="inp" maxLength={300} placeholder="Ask Nova anything…" value={novaQ} onChange={(e) => setNovaQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && novaQ.trim() && !nova.busy) { askNova("ask", novaQ); setNovaQ(""); } }} />
+            <button className="btn sm" disabled={!novaQ.trim() || nova.busy} onClick={() => { askNova("ask", novaQ); setNovaQ(""); }}>Ask</button>
           </div>
-          <button className="btn g sm" disabled={!novaQ.trim() || nova.busy} onClick={() => askNova("improve", novaQ)}>💡 Improve my idea</button>
-          {nova.busy && <div className="novaout thinking">Nova is thinking…</div>}
-          {nova.out && !nova.busy && (
-            <>
-              <div className="novaout">{nova.out}</div>
-              <div className="acts">
-                <button className="btn sm" onClick={() => { act("🤖 Nova: " + nova.out!.replace(/\s+/g, " ").slice(0, 180)); setPanel("chat"); }}>Share to room</button>
-                <button className="btn g sm" onClick={async () => { try { await navigator.clipboard.writeText(nova.out!); toast("Copied"); } catch { toast("Could not copy"); } }}>Copy</button>
-              </div>
-            </>
-          )}
+          <button className="btn g sm" disabled={!novaQ.trim() || nova.busy} onClick={() => { askNova("improve", novaQ); setNovaQ(""); }}>💡 Improve my idea</button>
         </div>
       )}
 
@@ -823,16 +1152,42 @@ export default function WorldView() {
 
       {panel === "chat" && (
         <div className="sheet chatsheet" role="dialog" aria-label="Chat">
-          <div className="sh"><b>💬 Chat · {def.name}</b><button className="x2" onClick={() => setPanel(null)} aria-label="Close">×</button></div>
+          <div className="sh"><b>💬 Chat · {def.name}</b><span className="shbtns"><button className="x2" onClick={saveChat} aria-label="Save chat as a text file" title="Save chat notes">⬇</button><button className="x2" onClick={() => setPanel(null)} aria-label="Close">×</button></span></div>
           <div className="log" ref={logRef}>
-            {msgs.length === 0 && <span className="hint">Say hello 👋</span>}
-            {msgs.map((m, i) => (
-              <div key={i} className={m.me ? "m me" : "m"}>{m.tag && <i className="mtag">🔒 {m.tag}</i>}<b>{m.who}</b> {m.text}</div>
+            {msgs.length === 0 && <span className="hint">Say hello 👋 · try /nova a question, /me waves, /roll, or @name</span>}
+            {msgs.map((m) => (
+              <div key={m.mid} className={(m.me ? "m me" : "m") + (m.mention ? " mention" : "")}>
+                {m.reply && <div className="mq">↩ <b>{m.reply.who}</b> {m.reply.text}</div>}
+                {m.tag && <i className="mtag">🔒 {m.tag}</i>}<b>{m.who}</b> {m.text}
+                <span className="macts">
+                  <button aria-label="Reply" title="Reply" onClick={() => setReplyTo({ who: m.who, text: m.text.slice(0, 80) })}>↩</button>
+                  {!m.me && <button aria-label="Translate" title="Translate" onClick={() => void translateMsg(m)}>🌐</button>}
+                  <button aria-label="React" title="React" onClick={() => setPickFor(pickFor === m.mid ? null : m.mid)}>☺</button>
+                </span>
+                {pickFor === m.mid && (
+                  <div className="rxpick">{CHAT_EMOJI.map((e) => <button key={e} onClick={() => { api.current?.reactMsg(m.mid, e); setPickFor(null); }}>{e}</button>)}</div>
+                )}
+                {m.reacts && (
+                  <div className="rxrow">
+                    {(Object.entries(m.reacts) as [string, string[]][]).map(([e, ids]) => (
+                      <button key={e} className={"rx" + (ids.includes(uidRef.current) ? " on" : "")} onClick={() => api.current?.reactMsg(m.mid, e)}>{e} {ids.length}</button>
+                    ))}
+                  </div>
+                )}
+                {trans[m.mid] && <div className="mtr">🌐 {trans[m.mid]}</div>}
+              </div>
             ))}
           </div>
+          {(() => {
+            const who = Object.keys(typers).filter((k) => Date.now() - typers[k] < 3500).map((k) => peerNames[k]).filter(Boolean);
+            return who.length ? <div className="typing">{who.slice(0, 2).join(" and ")} {who.length > 2 ? "and others " : ""}{who.length === 1 ? "is" : "are"} typing…</div> : null;
+          })()}
+          {replyTo && <div className="replychip">↩ Replying to <b>{replyTo.who}</b>: {replyTo.text}<button onClick={() => setReplyTo(null)} aria-label="Cancel reply">×</button></div>}
+          {emojiOpen && <div className="rxpick quick">{QUICK_EMOJI.map((e) => <button key={e} onClick={() => setText((t) => (t + e).slice(0, 200))}>{e}</button>)}</div>}
           <div className="send">
+            <button className="btn g sm" onClick={() => setEmojiOpen(!emojiOpen)} aria-label="Emoji">😊</button>
             <input className="inp" maxLength={200} placeholder="Type a message…" value={text}
-              onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+              onChange={(e) => onType(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
             <button className="btn" onClick={submit}>Send</button>
           </div>
         </div>
@@ -842,6 +1197,18 @@ export default function WorldView() {
         <div className="sheet" role="dialog" aria-label="Actions">
           <div className="sh"><b>✨ Actions</b><button className="x2" onClick={() => setPanel(null)} aria-label="Close">×</button></div>
           <button className="novacard" onClick={() => setPanel("nova")}><span>🤖</span><span><b>Ask Nova</b><small>Icebreakers, chat summaries and idea feedback</small></span></button>
+          <div className="lbl">📺 Big screen (everyone in this world sees it)</div>
+          <LinkBox cinema={cinema} onPlay={(u) => api.current?.screen(u)} />
+          {room === "cosmos" && (
+            <>
+              <div className="lbl">☄️ Comet watch</div>
+              <div className="cometbox">
+                <span>{comet && comet.k >= 0 ? "A comet is crossing the sky right now!" : `Next comet in ${comet ? comet.inSec : "…"} s`}</span>
+                <button className="btn sm" onClick={wish}>✨ Make a wish</button>
+              </div>
+            </>
+          )}
+          <div className="acts"><button className="btn g" onClick={() => { setPanel(null); window.setTimeout(() => void takePhoto(), 250); }}>📸 Take a photo</button></div>
           <div className="lbl">Express yourself</div>
           <div className="emogrid">
             <button className="btn g" onClick={() => api.current?.emote("wave")}>👋 Wave</button>
@@ -856,7 +1223,7 @@ export default function WorldView() {
               <div className="acts"><button className="btn g" onClick={findSeat}>🪑 Find me a seat</button></div>
               {room === "meeting" && <p className="hint">🎥 Sit at the table to start or join the video meeting. Stand up to leave it.</p>}
               {room === "party" && <p className="hint">🎬 Sit in the cinema seats on the west side, paste a video link and watch together.</p>}
-              {room === "lab" && <p className="hint">🎓 Sit at a workstation to join the AI class and ask Nova questions.</p>}
+              {room === "lab" && <p className="hint">🎓 Sit at a workstation to join the AI class, write real code in the Code lab, and ask Nova questions.</p>}
             </>
           )}
           {(room === "meeting" || room === "lab") && (
@@ -1052,6 +1419,30 @@ export default function WorldView() {
               <div className="safety">
                 <button className="btn g sm" onClick={() => { hub.mute(sid); setSel(null); }}>Mute</button>
                 <button className="btn g sm" onClick={() => { hub.block(sid); api.current?.drop(sid); setSel(null); }}>Block</button>
+                <button className="btn g sm" onClick={() => { setReportFor(reportFor === sid ? null : sid); setRepReason(""); setRepNote(""); }}>🚩 Report</button>
+              </div>
+            )}
+            {!mine && reportFor === sid && (
+              <div className="repbox">
+                <div className="hint">Why are you reporting {nm}?</div>
+                <div className="chips">
+                  {["Harassment", "Spam", "Inappropriate content", "Impersonation", "Something else"].map((r) => (
+                    <button key={r} className={"chip" + (repReason === r ? " on" : "")} onClick={() => setRepReason(r)}>{r}</button>
+                  ))}
+                </div>
+                <input className="inp" maxLength={300} placeholder="Add a short note (optional)" value={repNote} onChange={(e) => setRepNote(e.target.value)} />
+                <div className="acts">
+                  <button className="btn sm" disabled={!repReason} onClick={async () => {
+                    try {
+                      const r = await fetch("/api/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room, target: nm, reason: repReason, note: repNote, by: name, lines: msgs.filter((m) => m.who === nm).slice(-8).map((m) => `${m.who}: ${m.text}`) }) });
+                      toast(r.ok ? "Report sent. Thank you. You can also Block them." : "Could not send the report. Try again in a minute.");
+                      if (r.ok) setReportFor(null);
+                    } catch {
+                      toast("Could not send the report. Check your connection.");
+                    }
+                  }}>Send report</button>
+                  <button className="btn g sm" onClick={() => setReportFor(null)}>Cancel</button>
+                </div>
               </div>
             )}
           </div>

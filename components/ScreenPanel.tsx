@@ -1,46 +1,50 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { LESSONS, answerLocal, parseVideoUrl } from "@/lib/world/screens";
+import CodeLab from "@/components/CodeLab";
 
 export interface CinemaState { url: string; label: string; by: string; since: number }
 export interface ClassState { l: number; s: number; by: string }
 
 /**
- * The shared screen you get when you SIT: the Party Hall cinema (paste a link, everyone seated watches)
- * and the AI Lab class (lesson slides plus "Ask Nova"). Stand up and it goes away.
+ * What you get when you SIT at the cinema seats (Party Hall) or a workstation (AI Lab).
+ * The video itself plays on the big 3D screen for everyone; here you pick what it shows.
+ * In the lab you also get the AI class and the code lab. Stand up and it goes away.
  */
 export default function ScreenPanel({
-  mode, cinema, klass, onPlay, onSlide,
+  mode, cinema, klass, onPlay, onSlide, onSolved,
 }: {
   mode: "cinema" | "class";
   cinema: CinemaState | null;
   klass: ClassState | null;
   onPlay: (url: string | null) => void;
   onSlide: (l: number, s: number) => void;
+  onSolved?: (title: string) => void;
 }) {
   const [small, setSmall] = useState(false);
+  const [tab, setTab] = useState<"class" | "code">("class");
   return (
-    <div className={"cinema" + (small ? " small" : "")} role="region" aria-label={mode === "cinema" ? "Party cinema" : "AI class"}>
+    <div className={"cinema" + (small ? " small" : "")} role="region" aria-label={mode === "cinema" ? "Party cinema" : "AI lab"}>
       <div className="mhead">
-        <span>{mode === "cinema" ? "🎬 Party cinema" : "🎓 AI class"}</span>
+        <span>{mode === "cinema" ? "🎬 Party cinema" : "🎓 AI lab"}</span>
         <button className="mmin" onClick={() => setSmall(!small)} aria-label={small ? "Expand" : "Shrink"}>{small ? "⤢" : "–"}</button>
       </div>
-      {!small && (mode === "cinema" ? <Cinema cinema={cinema} onPlay={onPlay} /> : <Class klass={klass} onSlide={onSlide} />)}
+      {!small && mode === "class" && (
+        <div className="chips">
+          <button className={"chip" + (tab === "class" ? " on" : "")} onClick={() => setTab("class")}>🎓 Class</button>
+          <button className={"chip" + (tab === "code" ? " on" : "")} onClick={() => setTab("code")}>💻 Code lab</button>
+        </div>
+      )}
+      {!small && (mode === "cinema" ? <Cinema cinema={cinema} onPlay={onPlay} /> : tab === "class" ? <Class klass={klass} onSlide={onSlide} /> : <CodeLab onSolved={onSolved || (() => {})} />)}
     </div>
   );
 }
 
-function Cinema({ cinema, onPlay }: { cinema: CinemaState | null; onPlay: (u: string | null) => void }) {
+/** Paste a link for the big screen. The video itself plays on the 3D screen for everyone in the room. */
+export function LinkBox({ cinema, onPlay }: { cinema: CinemaState | null; onPlay: (u: string | null) => void }) {
   const [link, setLink] = useState("");
   const [err, setErr] = useState("");
-  const [changing, setChanging] = useState(false);
-  // Compute the start point once per video so the player is not reloaded on every re-render.
-  const v = useMemo(
-    () => (cinema ? parseVideoUrl(cinema.url, (Date.now() - cinema.since) / 1000) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cinema?.url, cinema?.since]
-  );
   const submit = () => {
     if (!parseVideoUrl(link)) {
       setErr("Paste a https link to a YouTube or Vimeo video, or a direct .mp4 / .webm file.");
@@ -49,48 +53,27 @@ function Cinema({ cinema, onPlay }: { cinema: CinemaState | null; onPlay: (u: st
     setErr("");
     onPlay(link.trim());
     setLink("");
-    setChanging(false);
   };
   return (
     <div className="cbody">
-      {v && cinema ? (
-        <>
-          <div className="cframe">
-            {v.kind === "embed" ? (
-              <iframe
-                key={cinema.since}
-                src={v.src}
-                title={v.label}
-                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                allowFullScreen
-                sandbox="allow-scripts allow-same-origin allow-presentation"
-                referrerPolicy="strict-origin-when-cross-origin"
-              />
-            ) : (
-              <video key={cinema.since} src={v.src} controls autoPlay playsInline />
-            )}
-          </div>
-          <div className="cmeta">
-            <span>Started by <b>{cinema.by}</b> · {v.label}. Press play if it does not start by itself.</span>
-          </div>
-          <div className="cact">
-            <button className="btn g sm" onClick={() => setChanging(!changing)}>{changing ? "Cancel" : "Change video"}</button>
-            <button className="btn g sm" onClick={() => onPlay(null)}>■ Stop for everyone</button>
-          </div>
-        </>
+      {cinema ? (
+        <div className="cmeta">Now on the big screen: <b>{cinema.label}</b>, started by <b>{cinema.by}</b>.</div>
       ) : (
-        <p className="hint">Nothing is playing. Paste a link and everyone seated in the cinema watches together.</p>
+        <div className="cmeta">The big screen is idle.</div>
       )}
-      {(!cinema || changing) && (
-        <div className="crow">
-          <input value={link} maxLength={400} placeholder="https://youtube.com/watch?v=…" aria-label="Video link" onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-          <button className="btn sm" onClick={submit}>▶ Play</button>
-        </div>
-      )}
+      <div className="crow">
+        <input value={link} maxLength={400} placeholder="https://youtube.com/watch?v=…" aria-label="Video link" onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+        <button className="btn sm" onClick={submit}>▶ Play</button>
+        {cinema && <button className="btn g sm" onClick={() => onPlay(null)}>■ Stop</button>}
+      </div>
       {err && <div className="merr">{err}</div>}
-      <p className="hint">Only YouTube, Vimeo and direct video links work. Each person can pause or seek in their own player.</p>
+      <p className="hint">YouTube, Vimeo or a direct video link. It plays on the screen for everyone in this world. Use the video bar to pause or change volume.</p>
     </div>
   );
+}
+
+function Cinema({ cinema, onPlay }: { cinema: CinemaState | null; onPlay: (u: string | null) => void }) {
+  return <LinkBox cinema={cinema} onPlay={onPlay} />;
 }
 
 function Class({ klass, onSlide }: { klass: ClassState | null; onSlide: (l: number, s: number) => void }) {
