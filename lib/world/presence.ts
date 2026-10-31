@@ -24,7 +24,7 @@ export interface PresenceEvents {
   /** `huddle` is set when the message was sent from inside a private circle. */
   onChat?: (id: string, text: string, huddle?: string, extra?: { mid?: string; rt?: { who: string; text: string } }) => void;
   /** Chat extras: emoji reactions on a message and "is typing". Untrusted: validated before it gets here. */
-  onChatX?: (id: string, m: { k: "react" | "typing"; mid?: string; e?: string }) => void;
+  onChatX?: (id: string, m: { k: "react" | "typing" | "caption"; mid?: string; e?: string; text?: string }) => void;
   onEmote?: (id: string, e: string) => void;
   /** Lumen Orb actions (music, theme, effects, shouts) from another player. Untrusted: validate before use. */
   onOrb?: (id: string, payload: Record<string, unknown>) => void;
@@ -102,6 +102,7 @@ export function connectPresence(
       const m = payload as { id?: unknown; k?: unknown; mid?: unknown; e?: unknown } | null;
       if (!m || typeof m.id !== "string") return;
       if (m.k === "typing") ev.onChatX?.(m.id, { k: "typing" });
+      else if (m.k === "caption" && typeof (m as { text?: unknown }).text === "string") ev.onChatX?.(m.id, { k: "caption", text: ((m as { text: string }).text).slice(0, 160) });
       else if (m.k === "react" && typeof m.mid === "string" && /^[\w-]{1,16}$/.test(m.mid) && typeof m.e === "string" && m.e.length <= 8) ev.onChatX?.(m.id, { k: "react", mid: m.mid, e: m.e });
     })
     .on("broadcast", { event: "emote" }, ({ payload }) => {
