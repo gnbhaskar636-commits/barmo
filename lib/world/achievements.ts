@@ -11,6 +11,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "coder", icon: "💻", title: "First commit", desc: "Solve a code lab challenge" },
   { id: "coder3", icon: "🧠", title: "Hacker", desc: "Solve 3 code lab challenges" },
   { id: "wish", icon: "🌠", title: "Wish upon a star", desc: "Make a wish on a comet" },
+  { id: "quiz", icon: "🧠", title: "Quiz night", desc: "Answer a trivia question" },
+  { id: "quiz_win", icon: "🏆", title: "Quiz champ", desc: "Win a trivia night against other players" },
   { id: "photo", icon: "📸", title: "Photographer", desc: "Take a photo of a world" },
   { id: "explorer", icon: "🧭", title: "Explorer", desc: "Visit all five worlds" },
 ];
