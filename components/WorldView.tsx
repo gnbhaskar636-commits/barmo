@@ -17,6 +17,7 @@ import { MENUS, drinkById } from "@/lib/world/drinks";
 import { LESSONS, parseVideoUrl } from "@/lib/world/screens";
 import { cometPhase, type CometPhase } from "@/lib/world/comet";
 import { ACH_REWARD, unlock, visitWorld } from "@/lib/world/achievements";
+import { APP_VERSION } from "@/lib/version";
 import { loadSolved } from "@/lib/world/codeLab";
 import { grantTokens } from "@/lib/economy/economy";
 import { listen, speak, speakSupported, speechSupported, stopSpeaking } from "@/lib/world/speech";
@@ -35,7 +36,7 @@ import { TRACKS, musicVolume, setMusicVolume, startTrack, stopTrack } from "@/li
 import { BURSTS, THEMES } from "@/lib/world/orb";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 
-type Panel = null | "worlds" | "chat" | "react" | "actions" | "people" | "menu" | "orb" | "nova";
+type Panel = null | "worlds" | "chat" | "react" | "actions" | "people" | "menu" | "orb" | "nova" | "feedback";
 type Poll = { q: string; votes: Record<string, number> };
 const pollText = (p: Poll) => {
   const c = [0, 0, 0];
@@ -196,6 +197,10 @@ export default function WorldView() {
   const [npcThread, setNpcThread] = useState<Turn[]>([]);
   const [npcQ, setNpcQ] = useState("");
   const [npcBusy, setNpcBusy] = useState(false);
+  const [fbCat, setFbCat] = useState("Bug");
+  const [fbText, setFbText] = useState("");
+  const [fbDiag, setFbDiag] = useState(true);
+  const [fbBusy, setFbBusy] = useState(false);
   const [camMode, setCamMode] = useState<CamMode>("follow");
   const [ctl, setCtl] = useState<CamControls>(DEFAULT_CTL);
   const [actTab, setActTab] = useState<"talk" | "play" | "media" | "me">("talk");
@@ -1055,6 +1060,22 @@ export default function WorldView() {
     saveControls(n);
     api.current?.setControls(n);
   };
+  const sendFeedback = async () => {
+    if (fbBusy || fbText.trim().length < 3) return;
+    setFbBusy(true);
+    try {
+      const diag = fbDiag ? `v${APP_VERSION} · ${room} · ${gfx} graphics · ${window.innerWidth}x${window.innerHeight} · ${navigator.userAgent.slice(0, 120)}` : "";
+      const r = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: fbCat, message: fbText, diag }) });
+      if (r.ok) {
+        toast("Thank you! Your feedback was sent.");
+        setFbText("");
+        setPanel(null);
+      } else toast("Could not send right now. Please try again in a minute.");
+    } catch {
+      toast("Could not send. Check your connection.");
+    }
+    setFbBusy(false);
+  };
   const toggleHand = () => {
     const up = !iHand;
     setIHand(up);
@@ -1709,6 +1730,7 @@ export default function WorldView() {
             <button className="btn g" onClick={toggleSound}>{snd ? "🔊 Sound on" : "🔇 Sound off"}</button>
             <button className="btn g" onClick={toggleGfx}>{gfx === "high" ? "✨ Glow: on" : "✨ Glow: off (faster)"}</button>
             <button className="btn g" onClick={() => { setPanel(null); setWelcome(true); }}>❓ Welcome guide</button>
+            <button className="btn g" onClick={() => setPanel("feedback")}>📣 Send feedback</button>
             <button className="btn g" onClick={() => router.push("/")}>🚪 Leave</button>
           </div>
           <div className="lbl">🎮 Controls</div>
@@ -1733,6 +1755,19 @@ export default function WorldView() {
             <li><b>Stand in a green circle</b> for private chat and voice</li>
             <li><b>😀 React</b> floats an emoji over your head</li>
           </ul>
+        </div>
+      )}
+
+      {panel === "feedback" && (
+        <div className="sheet" role="dialog" aria-label="Send feedback">
+          <div className="sh"><b>📣 Send feedback</b><button className="x2" onClick={() => setPanel(null)} aria-label="Close">×</button></div>
+          <p className="hint">Found a bug, have an idea, or something confusing? Tell us. Every message is read.</p>
+          <div className="chips">
+            {["Bug", "Idea", "Confusing", "Love it"].map((c) => <button key={c} className={"chip" + (fbCat === c ? " on" : "")} onClick={() => setFbCat(c)}>{({ Bug: "🐞", Idea: "💡", Confusing: "🤔", "Love it": "❤️" } as Record<string, string>)[c]} {c}</button>)}
+          </div>
+          <textarea className="fbbox" maxLength={600} rows={4} placeholder="What happened, or what would you like?" value={fbText} onChange={(e) => setFbText(e.target.value)} aria-label="Your feedback" />
+          <label className="inl"><input type="checkbox" checked={fbDiag} onChange={(e) => setFbDiag(e.target.checked)} /> Include technical details (version, world, screen size, browser). No personal data.</label>
+          <div className="acts"><button className="btn" disabled={fbBusy || fbText.trim().length < 3} onClick={() => void sendFeedback()}>{fbBusy ? "Sending…" : "Send"}</button></div>
         </div>
       )}
 

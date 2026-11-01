@@ -758,3 +758,16 @@ main>*{animation:rise .4s ease both}
 .ctlrow b{min-width:38px;text-align:right}
 @media(max-width:760px){.camctl{top:auto;bottom:calc(var(--dock-h) + 150px);transform:none}.camctl button{width:38px;height:38px}}
 @media(pointer:coarse){.camctl button{width:46px;height:46px}}
+
+/* ===== V2.2: setup check, error page, feedback ===== */
+.fbbox{width:100%;resize:vertical;font:inherit;font-size:14px;line-height:1.45;background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0}
+.setup,.errpage{max-width:720px;margin:0 auto;padding:28px 16px 60px;color:var(--ink)}
+.setup h1,.errpage h1{font:600 30px Fraunces,Georgia,serif;margin:0 0 6px}
+.setupsum{margin:14px 0;padding:12px 14px;border-radius:14px;border:1px solid var(--line);font-size:15px}
+.setupsum.ok{border-color:#5ef2c8;background:rgba(94,242,200,.1)}.setupsum.bad{border-color:#ff8a80;background:rgba(255,138,128,.1)}
+.setupsum small{display:block;color:var(--mute);margin-top:4px}
+.setupcard{margin:10px 0;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.04)}
+.setupcard.ok{border-color:rgba(94,242,200,.5)}.setupcard.bad{border-color:#ff8a80}.setupcard.warn{border-color:rgba(255,211,77,.5)}
+.setupcard h3{margin:0 0 6px;font-size:16px}.setupcard p{margin:4px 0;font-size:14px;line-height:1.5}
+.errpage{text-align:center;padding-top:18vh}
+.errpage .acts{justify-content:center;margin-top:16px}

@@ -1,7 +1,15 @@
-# BARMO Lounge V2.1 — 3D lounge + community
+# BARMO Lounge V2.2 — 3D lounge + community
 
 Open the site, pick a name and avatar, walk around a shared 3D lounge, and meet people live.
 No sign-up. Real-time uses Supabase Realtime only (no database tables).
+
+## What is new in V2.2: launch-ready
+
+- **Setup check** at `/setup` (`/api/health`): a checklist of what is connected (live multiplayer, AI, video, report delivery) with what each unlocks and exactly what to add if something is missing. It only says whether a setting exists, never its value.
+- **Send feedback** in the world Menu (`/api/feedback`): players pick Bug / Idea / Confusing / Love it, optionally attach version, world, screen size and browser. Goes to the server log and, if `REPORT_WEBHOOK_URL` is set, to your Discord or Slack. The same endpoint receives crash reports.
+- **Crash screen** (`app/error.tsx`): a friendly page with *Try again*, *Reload* and *Send an error report* instead of a blank page.
+- **Automatic checks on GitHub** (`.github/workflows/ci.yml`): every pull request runs the type check, the tests and a full production build, so a broken change is caught before it reaches your live site.
+- **Tests** (`npm test`, 95 checks in `tests/`): trivia, controls, safe video links, the code lab (every challenge, using the real runner), Nova's offline answers and the setup check. Run `npm install` once first (adds the small `tsx` tool).
 
 ## What is new in V2.1: better controls
 
