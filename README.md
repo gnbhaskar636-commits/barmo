@@ -1,7 +1,38 @@
-# BARMO Lounge V1.1 — 3D lounge + community
+# BARMO Lounge V2.1 — 3D lounge + community
 
 Open the site, pick a name and avatar, walk around a shared 3D lounge, and meet people live.
 No sign-up. Real-time uses Supabase Realtime only (no database tables).
+
+## What is new in V2.1: better controls
+
+- **Free 360° camera.** Drag to orbit all the way around you and tilt up and down; scroll, pinch or + / − to zoom; double-click or R to reset; C (or the camera button) switches between **Follow**, **First person** and **Top view**; Shift + arrow keys turn the camera. When you sit down the camera turns to face the table or screen.
+- **Walking relative to the camera.** W / the stick moves you away from the camera, A / D strafe, and your character turns to face where it walks (before, A / D spun you like a tank and the camera was glued behind you).
+- **Make it yours.** Menu, *Controls*: Free camera or Classic (the old A / D turn style), look speed, invert up/down, and "camera swings behind me when I walk". Saved on the device.
+- Code: `lib/world/controls.ts` (rules, tested), camera and input in `lib/world/world.ts`, buttons in `components/WorldView.tsx`.
+
+## What is new in V2: a cleaner, easier interface
+
+- **One layout system.** Before, every feature placed its own floating card, so they overlapped at the top of the screen. Now there is a top area (`.hudtop`) that stacks everything in order, with no overlaps: private-circle bar, then "big screen / pinned / hands" on the left and "now playing" on the right, then the stage panels (trivia, cinema, AI lab, video meeting). Hints, captions, notifications and the Talk button share one bottom area (`.hudbottom`) above the dock.
+- **Actions in four tabs** instead of one long list: Talk, Play, Media, Me.
+- **Simpler chat.** One "⋯" menu per message (reply, react, translate, suggest replies, pin) and one "＋" tray for emoji, quick replies and dictation, instead of a row of tiny buttons.
+- **Welcome guide** for first-time visitors (reopen from Menu, "Welcome guide").
+- **Touch friendly.** Bigger buttons on phones and 16px inputs (no zoom on iPhone).
+- Code: layout is in `components/WorldView.tsx` (return block) and the "V2" section of `app/globals.css`.
+
+## What is new in V1.3: Trivia night
+
+- **Trivia night in every world.** Actions, then pick a category (Mixed, AI and tech, Space, World, Music and fun) and press *Start 5 questions*, or *AI questions* for fresh questions written by Nova (needs the AI key; falls back to the built-in 40-question bank). Everyone in that world sees the same question at the same moment, answers in 15 seconds (faster = up to 150 points), sees the reveal and a live leaderboard, and the winner is announced. Anyone can end it; people who join mid-game catch up automatically.
+- Two new achievements (Quiz night, Quiz champ). Questions from the network and from the AI are strictly validated before use. Code: `lib/world/quiz.ts`, `components/QuizPanel.tsx`.
+- Scoring is computed on each player's own device from the answers everyone broadcasts, so it is for fun, not for prizes.
+
+## What is new in V1.2: communication
+
+- **Live captions.** Actions, then *Share my live captions*: your speech becomes text that everyone in the world sees as subtitles. Off by default; uses the browser's speech service (Chrome/Edge). *Transcript* downloads everything captioned, and *AI meeting notes* asks Nova to summarize it into key points and action items.
+- **Raise hand.** Everyone sees who has a hand up (also floats above the avatar).
+- **Pinned message.** Pin any chat message to the whole room (shown top-left, late joiners see it too).
+- **Faster replying.** Voice dictation in the chat box, one-tap quick replies, and AI reply suggestions on any message.
+- **Accessibility.** Read new messages aloud, live captions, and everything keyboard-usable.
+- Code: `lib/world/speech.ts`, chat extras in `components/WorldView.tsx`, `/api/nova` task `reply`.
 
 ## What is new in V1.1
 

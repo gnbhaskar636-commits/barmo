@@ -12,6 +12,7 @@ import { makeRealism, shade } from "@/lib/world/realism";
 import { addNpcs } from "@/lib/world/npcs";
 import { disposeCup, drinkById, makeCup } from "@/lib/world/drinks";
 import { addVideoWall, makeVideoOverlay, videoSpec } from "@/lib/world/videoWall";
+import { PITCH_DEFAULT, PITCH_MAX, PITCH_MIN, ZOOM_MAX, ZOOM_MIN, clamp, loadControls, moveVector, nextCamMode, orbitOffset, type CamControls, type CamMode } from "@/lib/world/controls";
 import type { VideoSrc } from "@/lib/world/screens";
 import { addConnect, type LinkNode } from "@/lib/world/connect";
 import { addTerrace, onTerrace } from "@/lib/world/terrace";
@@ -73,6 +74,8 @@ export interface WorldOptions {
   onNpcClick?: (id: string) => void;
   /** Graphics quality in use (auto = the world lowered it because the device was struggling). */
   onQuality?: (q: "high" | "low", auto: boolean) => void;
+  /** Fired when the camera viewpoint changes (button or the C key). */
+  onCamMode?: (m: CamMode) => void;
 }
 
 function webglAvailable(): boolean {
@@ -124,6 +127,10 @@ export interface World {
   setVideoHidden: (hide: boolean) => void;
   /** Captures the 3D view as a PNG (the video on the big screen is not included). */
   snapshot: () => Promise<Blob | null>;
+  /** Apply new control settings (sensitivity, invert, classic style, follow). */
+  setControls: (c: CamControls) => void;
+  /** Camera helpers for the on-screen buttons. */
+  camera: (a: "cycle" | "reset" | "in" | "out") => CamMode;
 }
 
 /** Height of a chair seat; a sitting avatar's hips are placed here. */
@@ -335,7 +342,7 @@ export function runWorld(
   if (!webglAvailable()) {
     host.innerHTML =
       '<div class="empty" style="margin:20px">3D is not available in this browser. Turn on hardware acceleration or try a current version of Chrome, Edge, Firefox or Safari.</div>';
-    return { destroy: () => {}, applyPeerState: () => {}, removePeer: () => {}, say: () => {}, emote: () => {}, teleport: () => {}, setTheme: () => {}, burst: () => {}, shout: () => {}, emoteAll: () => {}, interact: () => {}, react: () => {}, setSpeaking: () => {}, setQuality: () => {}, sitNearest: () => false, stand: () => {}, setBoard: () => {}, setDrink: () => {}, setVideo: () => {}, setVideoInteractive: () => {}, setVideoHidden: () => {}, snapshot: () => Promise.resolve(null) };
+    return { destroy: () => {}, applyPeerState: () => {}, removePeer: () => {}, say: () => {}, emote: () => {}, teleport: () => {}, setTheme: () => {}, burst: () => {}, shout: () => {}, emoteAll: () => {}, interact: () => {}, react: () => {}, setSpeaking: () => {}, setQuality: () => {}, sitNearest: () => false, stand: () => {}, setBoard: () => {}, setDrink: () => {}, setVideo: () => {}, setVideoInteractive: () => {}, setVideoHidden: () => {}, snapshot: () => Promise.resolve(null), setControls: () => {}, camera: () => "follow" };
   }
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -396,7 +403,6 @@ export function runWorld(
   let explicitTheme = "midnight";
   let bloom: UnrealBloomPass | null = null;
   let camDist = 5;
-  let camH = 3.4;
   const introT0 = performance.now();
   // The song's own colour theme, unless someone picked a light theme on the orb (that wins).
   const applyTheme = () => {
@@ -515,6 +521,27 @@ export function runWorld(
     raf = 0,
     last = performance.now(),
     ang = 0;
+  // Camera: orbits around you on its own (360 degrees), separate from the way you face.
+  let ctl: CamControls = loadControls();
+  let camYaw = spawn.yaw;
+  let camPitch = PITCH_DEFAULT;
+  let fpPitch = 0;
+  let zoom = 1;
+  let camMode: CamMode = "follow";
+  let dragging = false;
+  const ckeys: Record<string, boolean> = {};
+  const tgtV = new THREE.Vector3();
+  const setMode = (m: CamMode) => {
+    camMode = m;
+    me.visible = m !== "first";
+    opts.onCamMode?.(m);
+  };
+  const resetCam = () => {
+    camYaw = yaw;
+    camPitch = PITCH_DEFAULT;
+    fpPitch = 0;
+    zoom = 1;
+  };
 
   // --- sitting, tap-to-move, portals, context button ---
   let seat: Seat | null = null;
@@ -563,6 +590,7 @@ export function runWorld(
     marker.visible = false;
     me.position.set(st.x, 0, st.z);
     yaw = st.yaw;
+    camYaw = st.yaw; // face the table (or screen) when you sit down
     me.rotation.y = st.yaw;
     me.userData.sit = true;
   };
@@ -593,8 +621,19 @@ export function runWorld(
       interact();
       return;
     }
+    if (e.type === "keydown" && !e.repeat && !e.ctrlKey && !e.metaKey) {
+      if (k === "c") return void setMode(nextCamMode(camMode));
+      if (k === "r") return resetCam();
+    }
+    if (e.type === "keydown" && !e.ctrlKey && !e.metaKey && (k === "+" || k === "=")) zoom = clamp(zoom * 0.88, ZOOM_MIN, ZOOM_MAX);
+    if (e.type === "keydown" && !e.ctrlKey && !e.metaKey && (k === "-" || k === "_")) zoom = clamp(zoom * 1.14, ZOOM_MIN, ZOOM_MAX);
     if ((MOVEMENT_KEYS as readonly string[]).includes(k)) {
-      keys[k] = e.type === "keydown";
+      // Shift + arrow keys turn the camera instead of walking
+      if (e.type === "keydown" && e.shiftKey && k.startsWith("arrow")) ckeys[k] = true;
+      else if (e.type === "keyup") {
+        ckeys[k] = false;
+        keys[k] = false;
+      } else if (!ckeys[k]) keys[k] = true;
       e.preventDefault();
     }
   };
@@ -626,19 +665,53 @@ export function runWorld(
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    let pd: { sx: number; sy: number; lx: number; t: number; moved: boolean } | null = null;
+    let pd: { sx: number; sy: number; lx: number; ly: number; t: number; moved: boolean } | null = null;
+    const ptrs = new Map<number, { x: number; y: number }>();
+    let pinch = 0;
     cv.addEventListener("pointerdown", (e) => {
-      pd = { sx: e.clientX, sy: e.clientY, lx: e.clientX, t: performance.now(), moved: false };
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        pinch = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pd) pd.moved = true; // two fingers = zoom, never a tap
+      }
+      pd = { sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), moved: ptrs.size > 1 };
+      dragging = true;
     });
+    cv.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      zoom = clamp(zoom * (e.deltaY > 0 ? 1.1 : 0.9), ZOOM_MIN, ZOOM_MAX);
+    }, { passive: false });
+    cv.addEventListener("dblclick", () => resetCam());
     cv.addEventListener("pointermove", (e) => {
+      if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch > 0 && d > 0) zoom = clamp(zoom * (pinch / d), ZOOM_MIN, ZOOM_MAX);
+        pinch = d;
+        return;
+      }
       if (!pd) return;
       if (!pd.moved && Math.hypot(e.clientX - pd.sx, e.clientY - pd.sy) > 8) pd.moved = true;
       if (pd.moved) {
-        yaw -= (e.clientX - pd.lx) * 0.006;
+        const dx = e.clientX - pd.lx;
+        const dy = e.clientY - pd.ly;
         pd.lx = e.clientX;
+        pd.ly = e.clientY;
+        if (ctl.classic) yaw -= dx * 0.006;
+        else {
+          camYaw -= dx * 0.006 * ctl.sens;
+          const dp = dy * 0.005 * ctl.sens * (ctl.invertY ? -1 : 1);
+          if (camMode === "first") fpPitch = clamp(fpPitch - dp, -1.1, 1.1);
+          else camPitch = clamp(camPitch + dp, PITCH_MIN, PITCH_MAX);
+        }
       }
     });
     const endPtr = (e: PointerEvent) => {
+      ptrs.delete(e.pointerId);
+      if (ptrs.size < 2) pinch = 0;
+      if (ptrs.size === 0) dragging = false;
       const d = pd;
       pd = null;
       if (!d || d.moved || performance.now() - d.t > 500 || (!opts.onPeerClick && !opts.onOrbClick)) return;
@@ -775,6 +848,7 @@ export function runWorld(
         yaw += wrap(seat.yaw - yaw);
         meMoving = false;
       } else {
+        let goalWalk = false;
         if (!manual && goal) {
           const dx = goal.x - me.position.x,
             dz = goal.z - me.position.z;
@@ -788,16 +862,35 @@ export function runWorld(
             const diff = wrap(Math.atan2(dx, dz) - yaw);
             yaw += diff * Math.min(1, 9 * dt);
             f = Math.abs(diff) < 1.3 ? 1 : 0;
+            goalWalk = true;
           }
         }
-        meMoving = f !== 0 || s !== 0;
-        yaw -= s * 2.2 * dt;
-        if (f) {
+        // Free camera: keys and stick are relative to where the camera looks, and you turn to face where you walk.
+        // Classic: A / D turn you and the camera stays behind you. Tapping the floor walks along your heading.
+        let mx = 0;
+        let mz = 0;
+        if (goalWalk) {
+          mx = Math.sin(yaw) * f;
+          mz = Math.cos(yaw) * f;
+          meMoving = f !== 0;
+        } else if (ctl.classic) {
+          yaw -= s * 2.2 * dt;
+          mx = Math.sin(yaw) * f;
+          mz = Math.cos(yaw) * f;
+          meMoving = f !== 0 || s !== 0;
+        } else {
+          const mv = moveVector(f, s, camYaw);
+          mx = mv.x * mv.amt;
+          mz = mv.z * mv.amt;
+          meMoving = mv.amt > 0;
+          if (mv.amt > 0) yaw += wrap(Math.atan2(mv.x, mv.z) - yaw) * Math.min(1, 12 * dt);
+        }
+        if (mx !== 0 || mz !== 0) {
           const step = 4 * (terrace.riding() ? 1.5 : 1) * dt;
           const ox = me.position.x,
             oz = me.position.z;
-          const nx = ox + Math.sin(yaw) * f * step,
-            nz = oz + Math.cos(yaw) * f * step;
+          const nx = ox + mx * step,
+            nz = oz + mz * step;
           if (!blocked(nx, oz)) me.position.x = nx;
           if (!blocked(me.position.x, nz)) me.position.z = nz;
           if (goal) {
@@ -820,15 +913,29 @@ export function runWorld(
         opts.into.send({ x: me.position.x, z: me.position.z, yaw: me.rotation.y, sit: !!seat });
       }
 
-      // Cinematic follow: swoops in on arrival, eases closer when you sit down.
+      // Camera: orbits freely around you (drag, Shift+arrows), zooms (wheel, pinch, + / -), three viewpoints (C).
+      if (ctl.classic) camYaw = yaw;
+      else if (ctl.follow && meMoving && !dragging) camYaw += wrap(yaw - camYaw) * Math.min(1, 1.8 * dt);
+      const ky = (ckeys.arrowright ? -1 : 0) + (ckeys.arrowleft ? 1 : 0);
+      const kp = (ckeys.arrowdown ? 1 : 0) + (ckeys.arrowup ? -1 : 0);
+      if (ky) camYaw += ky * 1.9 * ctl.sens * dt;
+      if (kp) {
+        if (camMode === "first") fpPitch = clamp(fpPitch - kp * 1.2 * ctl.sens * dt, -1.1, 1.1);
+        else camPitch = clamp(camPitch + kp * 1.2 * ctl.sens * dt, PITCH_MIN, PITCH_MAX);
+      }
       camDist += ((seat ? 3.4 : 5) - camDist) * Math.min(1, 3 * dt);
-      camH += ((seat ? 2.5 : 3.4) - camH) * Math.min(1, 3 * dt);
       const ip = reduce ? 1 : Math.min(1, (performance.now() - introT0) / 2000);
       const sw = Math.pow(1 - ip, 3);
-      const tx = me.position.x - Math.sin(yaw + sw * 0.9) * (camDist + sw * 5),
-        tz = me.position.z - Math.cos(yaw + sw * 0.9) * (camDist + sw * 5);
-      camera.position.lerp(v.set(tx, camH + sw * 5.5, tz), Math.min(1, (ip < 1 ? 2.6 : 4) * dt));
-      camera.lookAt(me.position.x, 1.2, me.position.z);
+      tgtV.set(me.position.x, 1.2, me.position.z);
+      if (camMode === "first") {
+        camera.position.set(me.position.x + Math.sin(camYaw) * 0.12, 1.58, me.position.z + Math.cos(camYaw) * 0.12);
+        camera.lookAt(camera.position.x + Math.sin(camYaw) * Math.cos(fpPitch), camera.position.y + Math.sin(fpPitch), camera.position.z + Math.cos(camYaw) * Math.cos(fpPitch));
+      } else {
+        const top = camMode === "top";
+        const off = orbitOffset(camYaw + sw * 0.9, (top ? 1.2 : camPitch) + sw * 0.5, (top ? 8.5 : camDist) * zoom + sw * 5);
+        camera.position.lerp(v.set(tgtV.x + off.x, Math.max(0.5, tgtV.y + off.y), tgtV.z + off.z), Math.min(1, (ip < 1 ? 2.6 : 9) * dt));
+        camera.lookAt(tgtV);
+      }
       vover.update();
     } else {
       ang += dt * 0.12;
@@ -992,7 +1099,7 @@ export function runWorld(
     v.set(me.position.x, (me.userData.top as number) + 0.22, me.position.z).project(camera);
     tag.style.left = (v.x * 0.5 + 0.5) * host.clientWidth + "px";
     tag.style.top = (-v.y * 0.5 + 0.5) * host.clientHeight + "px";
-    tag.style.display = v.z < 1 ? "block" : "none";
+    tag.style.display = v.z < 1 && camMode !== "first" ? "block" : "none";
     bub.style.left = tag.style.left;
     bub.style.top = parseFloat(tag.style.top) - 30 + "px";
     bub.style.display = v.z < 1 && bub.textContent ? "block" : "none";
@@ -1156,6 +1263,15 @@ export function runWorld(
       realism.apply(hq);
       renderer.setPixelRatio(hq ? Math.min(devicePixelRatio, dprCap) : 1);
       size();
+    },
+    setControls(c) {
+      ctl = c;
+    },
+    camera(a) {
+      if (a === "cycle") setMode(nextCamMode(camMode));
+      else if (a === "reset") resetCam();
+      else zoom = clamp(zoom * (a === "in" ? 0.8 : 1.25), ZOOM_MIN, ZOOM_MAX);
+      return camMode;
     },
     snapshot() {
       return new Promise<Blob | null>((res) => {

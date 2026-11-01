@@ -5,7 +5,7 @@
  */
 export const APP_KNOWLEDGE = `BARMO Lounge is a 3D social space where people walk around as avatars, chat, and hang out. Facts you can rely on:
 - Worlds: Lounge (coffee bar with barista Marco, rooftop terrace, orb), Meeting Hall (a table you can sit at for a video meeting), Party Hall (DJ deck, dance floor, juice bar with Lena, cinema seats on the west side), AI Lab (neural-network hologram, workstations, AI class, Dr. Nova and Ravi), Cosmos (a calm space world). Switch worlds with the Worlds button.
-- Moving: tap or click the floor to walk, drag to look around, tap a chair to sit, press the Talk button (or E) next to a person or the glowing orb.
+- Moving: tap or click the floor to walk, or use W A S D / arrows / the joystick (they move relative to where the camera looks). Drag to look all the way around (360 degrees, up and down), scroll or pinch to zoom, double-click or press R to reset the view, press C (or the camera button) to switch between Follow, First person and Top view. Shift + arrow keys turn the camera. Tap a chair to sit, press the Talk button (or E) next to a person or the glowing orb. Menu has a Controls section: free camera or classic (A/D turn), look speed, invert look, and camera follow.
 - Music: use the orb or the DJ deck to pick a song. There are 8 songs and the whole room changes colours, lights, lasers and floor with the song.
 - Drinks: talk to Marco or Lena and pick from the menu. All drinks are zero-alcohol. You hold it for two minutes.
 - Cinema: in the Party Hall sit in the west seats, paste a YouTube, Vimeo or direct .mp4/.webm link, press play. Everyone seated watches.
@@ -17,6 +17,9 @@ export const APP_KNOWLEDGE = `BARMO Lounge is a 3D social space where people wal
 - Shared screen: every world has a big screen. Open Actions, paste a YouTube, Vimeo or direct .mp4/.webm link and press Play: the video plays right on the screen for everyone in that world, sitting or standing. Use Controls on the video bar to pause or change volume, Hide to turn it off just for you.
 - Code lab: in the AI Lab sit at a workstation, open the Code lab tab, pick a challenge, write JavaScript and press Run. Tests check your answer and Nova can review your code.
 - Cosmos: astronauts (Cmdr. Vega, Astro Kit) float around the deck, and a comet crosses the sky every 50 seconds. Open Actions to see the countdown and make a wish.
+- Communication tools: in Actions you can Raise hand (everyone sees it), Share my live captions (your speech becomes text for everyone, off until you switch it on; needs Chrome or Edge), download a Transcript, and get AI meeting notes. In chat you can dictate with the mic button, use quick replies (⚡), pin a message to the whole room (📌), ask for AI reply suggestions (✨) and have new messages read aloud (🔈).
+- Trivia night: in Actions pick a category and press Start (built-in questions) or AI questions. Everyone in that world sees the same question at the same time, has 15 seconds to answer, faster answers score more, and a leaderboard shows at the end. Anyone can end it.
+- Actions has four tabs: Talk (Nova, captions, raise hand, poll, meet people), Play (trivia, party and lounge activities, comet watch), Media (big screen link, photo) and Me (emotes, seating, places, quests). New players see a welcome guide once; it can be reopened from Menu.
 - Photos: Actions, then Take a photo, saves a picture of the world you are in (the video on the big screen is not included).
 - Achievements: small goals unlock as you explore (first chat, a drink, a song, a video, a code challenge, a comet wish, all five worlds). Each gives 10 tokens and they show on your Profile.
 - Safety: tap a person, then Mute, Block or Report. Spammers are muted automatically. Reports go to the site owner.
