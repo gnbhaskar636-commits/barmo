@@ -17,10 +17,13 @@ import { MENUS, drinkById } from "@/lib/world/drinks";
 import { LESSONS, parseVideoUrl } from "@/lib/world/screens";
 import { cometPhase, type CometPhase } from "@/lib/world/comet";
 import { ACH_REWARD, unlock, visitWorld } from "@/lib/world/achievements";
+import { APP_VERSION } from "@/lib/version";
+import { applyMention, firstLink, fmtTime, mentionQuery, showHead, slashQuery, suggestNames, suggestSlash, tokenize } from "@/lib/world/chatText";
 import { loadSolved } from "@/lib/world/codeLab";
 import { grantTokens } from "@/lib/economy/economy";
 import { listen, speak, speakSupported, speechSupported, stopSpeaking } from "@/lib/world/speech";
 import QuizPanel from "@/components/QuizPanel";
+import { CAM_LABEL, DEFAULT_CTL, loadControls, saveControls, type CamControls, type CamMode } from "@/lib/world/controls";
 import { CATS, LEAD, Q_TIME, SLOT, phaseAt, pickQuestions, validateQs, type Answers, type QuizQ, type QuizState } from "@/lib/world/quiz";
 import { npcLocal } from "@/lib/world/novaKnowledge";
 import { sceneFor } from "@/lib/world/scenes";
@@ -34,14 +37,14 @@ import { TRACKS, musicVolume, setMusicVolume, startTrack, stopTrack } from "@/li
 import { BURSTS, THEMES } from "@/lib/world/orb";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 
-type Panel = null | "worlds" | "chat" | "react" | "actions" | "people" | "menu" | "orb" | "nova";
+type Panel = null | "worlds" | "chat" | "react" | "actions" | "people" | "menu" | "orb" | "nova" | "feedback";
 type Poll = { q: string; votes: Record<string, number> };
 const pollText = (p: Poll) => {
   const c = [0, 0, 0];
   Object.values(p.votes).forEach((v) => c[v]++);
   return `📊 ${p.q.slice(0, 70)} · 👍 ${c[0]} · 👎 ${c[1]} · 🤔 ${c[2]}`;
 };
-interface ChatMsg { mid: string; who: string; text: string; me?: boolean; tag?: string; reply?: { who: string; text: string }; reacts?: Record<string, string[]>; mention?: boolean }
+interface ChatMsg { mid: string; who: string; text: string; at: number; sys?: boolean; me?: boolean; tag?: string; reply?: { who: string; text: string }; reacts?: Record<string, string[]>; mention?: boolean }
 interface Turn { r: "u" | "n"; t: string }
 const CHAT_EMOJI = ["👍", "❤️", "😂", "😮", "🎉"];
 const QUICK_EMOJI = ["😀", "😂", "🔥", "👏", "🎉", "❤️", "👍", "🤔"];
@@ -78,6 +81,9 @@ type Api = {
   klass: (l: number, s: number) => void;
   video: (kind: "interactive" | "hidden", on: boolean) => void;
   snapshot: () => Promise<Blob | null>;
+  gyro: (on: boolean) => Promise<boolean>;
+  setControls: (c: CamControls) => void;
+  camera: (a: "cycle" | "reset" | "in" | "out") => CamMode;
   quiz: (m: Record<string, unknown>) => void;
   quizAns: (q: number, c: number) => void;
   caption: (t: string) => void;
@@ -193,6 +199,18 @@ export default function WorldView() {
   const [npcThread, setNpcThread] = useState<Turn[]>([]);
   const [npcQ, setNpcQ] = useState("");
   const [npcBusy, setNpcBusy] = useState(false);
+  const [chatFilter, setChatFilter] = useState<"all" | "mentions">("all");
+  const [newBelow, setNewBelow] = useState(0);
+  const atBottom = useRef(true);
+  const [kbOpen, setKbOpen] = useState(false);
+  const [gyroOk, setGyroOk] = useState(false);
+  const [gyroOn, setGyroOn] = useState(false);
+  const [fbCat, setFbCat] = useState("Bug");
+  const [fbText, setFbText] = useState("");
+  const [fbDiag, setFbDiag] = useState(true);
+  const [fbBusy, setFbBusy] = useState(false);
+  const [camMode, setCamMode] = useState<CamMode>("follow");
+  const [ctl, setCtl] = useState<CamControls>(DEFAULT_CTL);
   const [actTab, setActTab] = useState<"talk" | "play" | "media" | "me">("talk");
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [tray, setTray] = useState(false);
@@ -321,6 +339,7 @@ export default function WorldView() {
     let voiceCtl: VoiceCtl | null = null;
     const world = runWorld(hostRef.current, {
       full: true,
+      onCamMode: (m) => setCamMode(m),
       onQuality: (q, auto) => {
         setGfx(q);
         if (auto) toast("Switched to Low graphics so it runs smoother. You can change this in the menu.");
@@ -400,10 +419,10 @@ export default function WorldView() {
           return { ...m, reacts: r };
         })
       );
-    const push = (who: string, t: string, me = false, tag?: string, extra?: { mid?: string; reply?: { who: string; text: string } }) => {
+    const push = (who: string, t: string, me = false, tag?: string, extra?: { mid?: string; reply?: { who: string; text: string }; sys?: boolean }) => {
       const first = name.trim().split(/\s+/)[0].toLowerCase();
       const mention = !me && ((first.length > 0 && t.toLowerCase().includes("@" + first)) || extra?.reply?.who === name);
-      setMsgs((m) => [...m.slice(-49), { mid: extra?.mid || rid(), who, text: t, me, tag, reply: extra?.reply, mention }]);
+      setMsgs((m) => [...m.slice(-49), { mid: extra?.mid || rid(), who, text: t, at: Date.now(), sys: extra?.sys, me, tag, reply: extra?.reply, mention }]);
       if (!me && readAloudRef.current) speak(`${who} says ${t}`);
       if (!me && panelRef.current !== "chat") {
         setUnread((u) => u + 1);
@@ -474,7 +493,7 @@ export default function WorldView() {
           if (quizRef.current) {
             quizRef.current = null;
             setQuiz(null);
-            if (!self) push(who, "🧠 ended the trivia night");
+            if (!self) push(who, "🧠 ended the trivia night", false, undefined, { sys: true });
           }
           return;
         }
@@ -490,7 +509,7 @@ export default function WorldView() {
         if (m.a === "start") {
           setQAns({});
           setQNames({});
-          if (!self) push(who, "🧠 started a trivia night. Join in!");
+          if (!self) push(who, "🧠 started a trivia night. Join in!", false, undefined, { sys: true });
         }
       } else if (m.k === "quizans") {
         if (muted) return;
@@ -516,7 +535,7 @@ export default function WorldView() {
         });
         if (up && !self) {
           world.react(fromId, "✋");
-          push(who, "✋ raised a hand");
+          push(who, "✋ raised a hand", false, undefined, { sys: true });
         }
       } else if (m.k === "pin") {
         if (muted) return;
@@ -529,7 +548,7 @@ export default function WorldView() {
           const p = { who: typeof m.who === "string" ? m.who.slice(0, 20) : who, text: t };
           pinRef.current = p;
           setPin(p);
-          if (!self) push(who, "📌 pinned a message");
+          if (!self) push(who, "📌 pinned a message", false, undefined, { sys: true });
         }
       } else if (m.k === "screen") {
         if (muted) return;
@@ -538,7 +557,7 @@ export default function WorldView() {
           setCinema(null);
           world.setVideo(null);
           if (room === "party") world.setBoard("Cinema is idle. Sit down, paste a link and press play.");
-          if (!self) push(who, "📺 stopped the big screen");
+          if (!self) push(who, "📺 stopped the big screen", false, undefined, { sys: true });
           return;
         }
         const v0 = parseVideoUrl(m.url);
@@ -550,7 +569,7 @@ export default function WorldView() {
         const v = parseVideoUrl(c.url, (Date.now() - since) / 1000);
         world.setVideo(v);
         if (room === "party") world.setBoard(`NOW SHOWING: ${v0.label} (started by ${who})`);
-        if (!self) push(who, "📺 put a video on the big screen");
+        if (!self) push(who, "📺 put a video on the big screen", false, undefined, { sys: true });
       } else if (m.k === "class" && room === "lab") {
         const l = Number(m.l);
         const sl = Number(m.s);
@@ -681,6 +700,9 @@ export default function WorldView() {
       vote: (c) => api.current?.orb({ k: "vote", c }),
       quality: (q) => world.setQuality(q),
       snapshot: () => world.snapshot(),
+      gyro: (on) => world.setGyro(on),
+      setControls: (c) => world.setControls(c),
+      camera: (a) => world.camera(a),
       voiceStart: async (h) => {
         if (!voiceCtl) return;
         await voiceCtl.start(h);
@@ -827,9 +849,52 @@ export default function WorldView() {
     if (hub.ready && !hub.me && sp.get("name")) hub.saveProfile({ name, av: avId });
   }, [hub.ready, hub.me]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Chat scrolling: stay at the bottom while you are there; if you scrolled up, show a "N new" button instead of jumping.
+  const toBottom = () => {
+    const el = logRef.current;
+    if (el) el.scrollTo(0, el.scrollHeight);
+    atBottom.current = true;
+    setNewBelow(0);
+  };
+  const onLogScroll = () => {
+    const el = logRef.current;
+    if (!el) return;
+    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 70;
+    if (atBottom.current) setNewBelow(0);
+  };
   useEffect(() => {
-    logRef.current?.scrollTo(0, logRef.current.scrollHeight);
-  }, [msgs, panel]);
+    if (panel !== "chat") return;
+    const last = msgs[msgs.length - 1];
+    if (!last) return;
+    if (atBottom.current || last.me) toBottom();
+    else setNewBelow((n) => n + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msgs.length]);
+  useEffect(() => {
+    if (panel === "chat") window.requestAnimationFrame(toBottom);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel]);
+  // Phones: when the keyboard opens, lift the chat above it (the page itself does not resize).
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const on = () => {
+      const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      document.documentElement.style.setProperty("--kb", (kb > 80 ? kb : 0) + "px");
+      document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
+      setKbOpen(kb > 80);
+    };
+    vv.addEventListener("resize", on);
+    vv.addEventListener("scroll", on);
+    on();
+    return () => {
+      vv.removeEventListener("resize", on);
+      vv.removeEventListener("scroll", on);
+    };
+  }, []);
+  useEffect(() => {
+    setGyroOk(typeof DeviceOrientationEvent !== "undefined" && window.matchMedia("(pointer: coarse)").matches);
+  }, []);
   useEffect(() => {
     if (panel === "chat") {
       setUnread(0);
@@ -889,6 +954,7 @@ export default function WorldView() {
     }
     return () => stopSpeaking();
   }, []);
+  useEffect(() => setCtl(loadControls()), []);
   useEffect(() => {
     try {
       if (localStorage.getItem("barmo-welcomed") !== "1") setWelcome(true);
@@ -1038,6 +1104,40 @@ export default function WorldView() {
     api.current?.quiz({ a: "start", qs: qs || pickQuestions(quizCat, 5), t0: Date.now() + LEAD, cat: quizCat, by: name });
     setQuizBusy(false);
     setPanel(null);
+  };
+  /** Saves a controls setting and applies it to the running world straight away. */
+  const updateCtl = (p: Partial<CamControls>) => {
+    const n = { ...ctl, ...p };
+    setCtl(n);
+    saveControls(n);
+    api.current?.setControls(n);
+  };
+  const sendFeedback = async () => {
+    if (fbBusy || fbText.trim().length < 3) return;
+    setFbBusy(true);
+    try {
+      const diag = fbDiag ? `v${APP_VERSION} · ${room} · ${gfx} graphics · ${window.innerWidth}x${window.innerHeight} · ${navigator.userAgent.slice(0, 120)}` : "";
+      const r = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: fbCat, message: fbText, diag }) });
+      if (r.ok) {
+        toast("Thank you! Your feedback was sent.");
+        setFbText("");
+        setPanel(null);
+      } else toast("Could not send right now. Please try again in a minute.");
+    } catch {
+      toast("Could not send. Check your connection.");
+    }
+    setFbBusy(false);
+  };
+  const toggleGyro = async () => {
+    if (ctl.classic) return toast("Switch to the Free camera (Menu, Controls) to look around with your phone.");
+    if (gyroOn) {
+      await api.current?.gyro(false);
+      setGyroOn(false);
+      return toast("Phone motion look is off");
+    }
+    const ok = await api.current?.gyro(true);
+    setGyroOn(!!ok);
+    toast(ok ? "📱 Move your phone to look around. Hold it upright." : "Motion access was not allowed.");
   };
   const toggleHand = () => {
     const up = !iHand;
@@ -1210,7 +1310,7 @@ export default function WorldView() {
   const hasSeats = def.seats.length > 0;
   const bell = hub.unreadNotices + hub.unreadDMs;
   return (
-    <div className="stage full" ref={hostRef} style={{ position: "relative", height: "100dvh" }}>
+    <div className={"stage full" + (panel === "chat" ? " chatopen" : "") + (kbOpen ? " kbopen" : "")} ref={hostRef} style={{ position: "relative", height: "100dvh" }}>
       <button className="rchip" onClick={() => toggle("worlds")} aria-label="Change world">
         <span className="ri">{def.icon}</span>
         <span className="rt"><b>{def.name}</b><small><i className={live ? "dot ok" : "dot"} />{live ? "Live" : status} · {people.length + 1} here</small></span>
@@ -1443,35 +1543,52 @@ export default function WorldView() {
       {panel === "chat" && (
         <div className="sheet chatsheet" role="dialog" aria-label="Chat">
           <div className="sh"><b>💬 Chat · {def.name}</b><span className="shbtns">{speakSupported() && <button className="x2" onClick={() => { const v = !readAloud; setReadAloud(v); readAloudRef.current = v; try { localStorage.setItem("barmo-tts", v ? "1" : "0"); } catch { /* ignore */ } if (!v) stopSpeaking(); }} aria-pressed={readAloud} aria-label="Read new messages aloud" title="Read new messages aloud">{readAloud ? "🔊" : "🔈"}</button>}<button className="x2" onClick={saveChat} aria-label="Save chat as a text file" title="Save chat notes">⬇</button><button className="x2" onClick={() => setPanel(null)} aria-label="Close">×</button></span></div>
-          <div className="log" ref={logRef}>
-            {msgs.length === 0 && <span className="hint">Say hello 👋 · try /nova a question, /me waves, /roll, or @name</span>}
-            {msgs.map((m) => (
-              <div key={m.mid} className={(m.me ? "m me" : "m") + (m.mention ? " mention" : "")}>
-                {m.reply && <div className="mq">↩ <b>{m.reply.who}</b> {m.reply.text}</div>}
-                {m.tag && <i className="mtag">🔒 {m.tag}</i>}<b>{m.who}</b> {m.text}
-                <button className="mmore" aria-label="Message actions" aria-expanded={menuFor === m.mid} onClick={() => setMenuFor(menuFor === m.mid ? null : m.mid)}>⋯</button>
-                {menuFor === m.mid && (
-                  <div className="mmenu" role="menu">
-                    <button role="menuitem" onClick={() => { setReplyTo({ who: m.who, text: m.text.slice(0, 80) }); setMenuFor(null); }}>↩ Reply</button>
-                    <button role="menuitem" onClick={() => { setPickFor(m.mid); setMenuFor(null); }}>☺ React</button>
-                    {!m.me && <button role="menuitem" onClick={() => { void translateMsg(m); setMenuFor(null); }}>🌐 Translate</button>}
-                    {!m.me && <button role="menuitem" onClick={() => { void suggestReply(m); setMenuFor(null); }}>✨ Suggest replies</button>}
-                    <button role="menuitem" onClick={() => { api.current?.pin(m.text, m.who); setMenuFor(null); }}>📌 Pin to room</button>
-                  </div>
-                )}
-                {pickFor === m.mid && (
-                  <div className="rxpick">{CHAT_EMOJI.map((e) => <button key={e} onClick={() => { api.current?.reactMsg(m.mid, e); setPickFor(null); }}>{e}</button>)}</div>
-                )}
-                {m.reacts && (
-                  <div className="rxrow">
-                    {(Object.entries(m.reacts) as [string, string[]][]).map(([e, ids]) => (
-                      <button key={e} className={"rx" + (ids.includes(uidRef.current) ? " on" : "")} onClick={() => api.current?.reactMsg(m.mid, e)}>{e} {ids.length}</button>
-                    ))}
-                  </div>
-                )}
-                {trans[m.mid] && <div className="mtr">🌐 {trans[m.mid]}</div>}
-              </div>
-            ))}
+          <div className="chips cfilter" role="tablist" aria-label="Chat filter">
+            <button role="tab" aria-selected={chatFilter === "all"} className={"chip" + (chatFilter === "all" ? " on" : "")} onClick={() => setChatFilter("all")}>All</button>
+            <button role="tab" aria-selected={chatFilter === "mentions"} className={"chip" + (chatFilter === "mentions" ? " on" : "")} onClick={() => setChatFilter("mentions")}>@ Mentions{msgs.filter((m) => m.mention).length > 0 ? ` (${msgs.filter((m) => m.mention).length})` : ""}</button>
+          </div>
+          <div className="logwrap">
+            <div className="log" ref={logRef} onScroll={onLogScroll}>
+              {(() => {
+                const shown = chatFilter === "mentions" ? msgs.filter((m) => m.mention) : msgs;
+                if (shown.length === 0) return <span className="hint">{chatFilter === "mentions" ? "Nobody has mentioned you yet." : "Say hello 👋 · try /nova a question, /me waves, /roll, or @name"}</span>;
+                return shown.map((m, i) => {
+                  if (m.sys) return <div key={m.mid} className="sysline"><b>{m.who}</b> {m.text}</div>;
+                  const head = showHead(shown, i);
+                  const link = firstLink(m.text);
+                  return (
+                    <div key={m.mid} className={(m.me ? "m me" : "m") + (m.mention ? " mention" : "") + (head ? "" : " cont")}>
+                      {head && <div className="mhead">{m.tag && <i className="mtag">🔒 {m.tag}</i>}<b>{m.me ? "You" : m.who}</b><time dateTime={new Date(m.at).toISOString()}>{fmtTime(m.at)}</time></div>}
+                      {m.reply && <div className="mq">↩ <b>{m.reply.who}</b> {m.reply.text}</div>}
+                      <div className="mtext">{tokenize(m.text).map((t, k) => (t.t === "link" ? <a key={k} href={t.href} target="_blank" rel="noopener noreferrer">{t.s}</a> : <span key={k}>{t.s}</span>))}</div>
+                      {link && parseVideoUrl(link) && <button className="mplay" onClick={() => { api.current?.screen(link); setPanel(null); }}>📺 Play on the big screen</button>}
+                      <button className="mmore" aria-label="Message actions" aria-expanded={menuFor === m.mid} onClick={() => setMenuFor(menuFor === m.mid ? null : m.mid)}>⋯</button>
+                      {menuFor === m.mid && (
+                        <div className="mmenu" role="menu">
+                          <button role="menuitem" onClick={() => { setReplyTo({ who: m.who, text: m.text.slice(0, 80) }); setMenuFor(null); }}>↩ Reply</button>
+                          <button role="menuitem" onClick={() => { setPickFor(m.mid); setMenuFor(null); }}>☺ React</button>
+                          {!m.me && <button role="menuitem" onClick={() => { void translateMsg(m); setMenuFor(null); }}>🌐 Translate</button>}
+                          {!m.me && <button role="menuitem" onClick={() => { void suggestReply(m); setMenuFor(null); }}>✨ Suggest replies</button>}
+                          <button role="menuitem" onClick={() => { api.current?.pin(m.text, m.who); setMenuFor(null); }}>📌 Pin to room</button>
+                        </div>
+                      )}
+                      {pickFor === m.mid && (
+                        <div className="rxpick">{CHAT_EMOJI.map((e) => <button key={e} onClick={() => { api.current?.reactMsg(m.mid, e); setPickFor(null); }}>{e}</button>)}</div>
+                      )}
+                      {m.reacts && (
+                        <div className="rxrow">
+                          {(Object.entries(m.reacts) as [string, string[]][]).map(([e, ids]) => (
+                            <button key={e} className={"rx" + (ids.includes(uidRef.current) ? " on" : "")} onClick={() => api.current?.reactMsg(m.mid, e)}>{e} {ids.length}</button>
+                          ))}
+                        </div>
+                      )}
+                      {trans[m.mid] && <div className="mtr">🌐 {trans[m.mid]}</div>}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+            {newBelow > 0 && <button className="jump" onClick={toBottom}>↓ {newBelow} new</button>}
           </div>
           {(() => {
             const who = Object.keys(typers).filter((k) => Date.now() - typers[k] < 3500).map((k) => peerNames[k]).filter(Boolean);
@@ -1489,6 +1606,19 @@ export default function WorldView() {
             </div>
           )}
           {emojiOpen && <div className="rxpick quick">{QUICK_EMOJI.map((e) => <button key={e} onClick={() => setText((t) => (t + e).slice(0, 200))}>{e}</button>)}</div>}
+          {(() => {
+            const sq = slashQuery(text);
+            const mq = mentionQuery(text);
+            if (sq !== null) {
+              const opts = suggestSlash(sq);
+              return opts.length ? <div className="ac" role="listbox">{opts.map((o) => <button key={o.cmd} onClick={() => setText(o.cmd)}><b>{o.cmd.trim()}</b> {o.hint}</button>)}</div> : null;
+            }
+            if (mq !== null) {
+              const names = suggestNames(mq, Object.values(peerNames));
+              return names.length ? <div className="ac" role="listbox">{names.map((n) => <button key={n} onClick={() => setText(applyMention(text, n))}>@{n}</button>)}</div> : null;
+            }
+            return null;
+          })()}
           {tray && (
             <div className="tray">
               <button className="btn g sm" onClick={() => { setEmojiOpen(!emojiOpen); setQrOpen(false); }}>😊 Emoji</button>
@@ -1693,18 +1823,45 @@ export default function WorldView() {
             <button className="btn g" onClick={toggleSound}>{snd ? "🔊 Sound on" : "🔇 Sound off"}</button>
             <button className="btn g" onClick={toggleGfx}>{gfx === "high" ? "✨ Glow: on" : "✨ Glow: off (faster)"}</button>
             <button className="btn g" onClick={() => { setPanel(null); setWelcome(true); }}>❓ Welcome guide</button>
+            <button className="btn g" onClick={() => setPanel("feedback")}>📣 Send feedback</button>
             <button className="btn g" onClick={() => router.push("/")}>🚪 Leave</button>
           </div>
+          <div className="lbl">🎮 Controls</div>
+          <div className="chips">
+            <button className={"chip" + (!ctl.classic ? " on" : "")} onClick={() => updateCtl({ classic: false })}>🎥 Free camera</button>
+            <button className={"chip" + (ctl.classic ? " on" : "")} onClick={() => updateCtl({ classic: true })}>🕹 Classic (A / D turn)</button>
+          </div>
+          <label className="ctlrow">Look speed
+            <input type="range" min={0.4} max={2.5} step={0.1} value={ctl.sens} aria-label="Look speed" onChange={(e) => updateCtl({ sens: Number(e.target.value) })} />
+            <b>{ctl.sens.toFixed(1)}×</b>
+          </label>
+          <label className="inl"><input type="checkbox" checked={ctl.invertY} onChange={(e) => updateCtl({ invertY: e.target.checked })} /> Invert up / down look</label>
+          <label className="inl"><input type="checkbox" checked={ctl.follow} disabled={ctl.classic} onChange={(e) => updateCtl({ follow: e.target.checked })} /> Camera swings behind me when I walk</label>
+          {gyroOk && <label className="inl"><input type="checkbox" checked={gyroOn} onChange={() => void toggleGyro()} /> Look around by moving my phone (hold it upright)</label>}
+          <p className="hint">Keys: <b>W A S D</b> or arrows walk · <b>Shift + arrows</b> turn the camera · <b>+ / −</b> or the wheel zoom · <b>C</b> changes the view · <b>R</b> resets it · <b>E</b> talk or sit.</p>
           <div className="lbl">How to move</div>
           <ul className="how">
             <li><b>Tap or click the floor</b> to walk there</li>
             <li><b>Joystick</b> (phone) or <b>W A S D / arrows</b> (computer)</li>
-            <li><b>Drag</b> the screen to look around</li>
+            <li><b>Drag</b> to look all the way around (up, down and 360°), <b>pinch or scroll</b> to zoom</li>
             <li><b>Tap a chair</b> or press <b>E</b> to sit and stand</li>
             <li><b>Walk into a big ring</b> to go to another world</li>
             <li><b>Stand in a green circle</b> for private chat and voice</li>
             <li><b>😀 React</b> floats an emoji over your head</li>
           </ul>
+        </div>
+      )}
+
+      {panel === "feedback" && (
+        <div className="sheet" role="dialog" aria-label="Send feedback">
+          <div className="sh"><b>📣 Send feedback</b><button className="x2" onClick={() => setPanel(null)} aria-label="Close">×</button></div>
+          <p className="hint">Found a bug, have an idea, or something confusing? Tell us. Every message is read.</p>
+          <div className="chips">
+            {["Bug", "Idea", "Confusing", "Love it"].map((c) => <button key={c} className={"chip" + (fbCat === c ? " on" : "")} onClick={() => setFbCat(c)}>{({ Bug: "🐞", Idea: "💡", Confusing: "🤔", "Love it": "❤️" } as Record<string, string>)[c]} {c}</button>)}
+          </div>
+          <textarea className="fbbox" maxLength={600} rows={4} placeholder="What happened, or what would you like?" value={fbText} onChange={(e) => setFbText(e.target.value)} aria-label="Your feedback" />
+          <label className="inl"><input type="checkbox" checked={fbDiag} onChange={(e) => setFbDiag(e.target.checked)} /> Include technical details (version, world, screen size, browser). No personal data.</label>
+          <div className="acts"><button className="btn" disabled={fbBusy || fbText.trim().length < 3} onClick={() => void sendFeedback()}>{fbBusy ? "Sending…" : "Send"}</button></div>
         </div>
       )}
 
@@ -1812,13 +1969,22 @@ export default function WorldView() {
           <div className="wcard">
             <h3>Welcome to {def.name} 👋</h3>
             <ul className="wsteps">
-              <li><span aria-hidden="true">👆</span><div><b>Walk around</b><small>Tap the floor, or use the joystick or W A S D.</small></div></li>
+              <li><span aria-hidden="true">👆</span><div><b>Walk and look around</b><small>Tap the floor, or use the joystick or W A S D. Drag to look all the way around, scroll or pinch to zoom.</small></div></li>
               <li><span aria-hidden="true">🪑</span><div><b>Sit and talk</b><small>Tap a chair to sit. Tap a person, or press the Talk button when you are close.</small></div></li>
               <li><span aria-hidden="true">🧭</span><div><b>Everything lives in the bar below</b><small>Chat, reactions, Actions (music, trivia, big screen, captions, photos) and People.</small></div></li>
               <li><span aria-hidden="true">🌐</span><div><b>Visit other worlds</b><small>Open Worlds for the Party Hall, AI Lab, Meeting Hall and Cosmos.</small></div></li>
             </ul>
             <button className="btn" onClick={() => { setWelcome(false); try { localStorage.setItem("barmo-welcomed", "1"); } catch { /* ignore */ } }}>Let&apos;s go</button>
           </div>
+        </div>
+      )}
+      {!welcome && (
+        <div className="camctl" role="group" aria-label="Camera controls">
+          <button onClick={() => api.current?.camera("cycle")} aria-label={"Camera view: " + CAM_LABEL[camMode] + ". Press to change."} title={"Camera: " + CAM_LABEL[camMode] + " (C)"}>{camMode === "first" ? "👁" : camMode === "top" ? "🗺" : "🎥"}</button>
+          <button onClick={() => api.current?.camera("in")} aria-label="Zoom in" title="Zoom in (+)">＋</button>
+          <button onClick={() => api.current?.camera("out")} aria-label="Zoom out" title="Zoom out (−)">－</button>
+          <button onClick={() => api.current?.camera("reset")} aria-label="Reset the camera behind me" title="Reset view (R or double-click)">🧭</button>
+          {gyroOk && <button className={gyroOn ? "on" : ""} aria-pressed={gyroOn} onClick={() => void toggleGyro()} aria-label="Look around by moving your phone" title="Look around by moving your phone">📱</button>}
         </div>
       )}
       <nav className="dock" aria-label="World controls">

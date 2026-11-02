@@ -748,3 +748,79 @@ main>*{animation:rise .4s ease both}
   .nowplaying .np-t small{display:none}
 }
 @media(prefers-reduced-motion:reduce){.welcome{animation:none}}
+
+/* ===== V2: camera buttons and control settings ===== */
+.camctl{position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:5;display:flex;flex-direction:column;gap:6px;opacity:.88}
+.camctl button{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--glass2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:var(--ink);font-size:18px;cursor:pointer;touch-action:manipulation;transition:transform .12s,background .2s}
+.camctl button:hover{background:rgba(255,255,255,.16)}.camctl button:active{transform:scale(.9)}
+.ctlrow{display:flex;align-items:center;gap:10px;font-size:13.5px;margin:8px 0}
+.ctlrow input[type=range]{flex:1}
+.ctlrow b{min-width:38px;text-align:right}
+@media(max-width:760px){.camctl{top:auto;bottom:calc(var(--dock-h) + 150px);transform:none}.camctl button{width:38px;height:38px}}
+@media(pointer:coarse){.camctl button{width:46px;height:46px}}
+
+/* ===== V2.2: setup check, error page, feedback ===== */
+.fbbox{width:100%;resize:vertical;font:inherit;font-size:14px;line-height:1.45;background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0}
+.setup,.errpage{max-width:720px;margin:0 auto;padding:28px 16px 60px;color:var(--ink)}
+.setup h1,.errpage h1{font:600 30px Fraunces,Georgia,serif;margin:0 0 6px}
+.setupsum{margin:14px 0;padding:12px 14px;border-radius:14px;border:1px solid var(--line);font-size:15px}
+.setupsum.ok{border-color:#5ef2c8;background:rgba(94,242,200,.1)}.setupsum.bad{border-color:#ff8a80;background:rgba(255,138,128,.1)}
+.setupsum small{display:block;color:var(--mute);margin-top:4px}
+.setupcard{margin:10px 0;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.04)}
+.setupcard.ok{border-color:rgba(94,242,200,.5)}.setupcard.bad{border-color:#ff8a80}.setupcard.warn{border-color:rgba(255,211,77,.5)}
+.setupcard h3{margin:0 0 6px;font-size:16px}.setupcard p{margin:4px 0;font-size:14px;line-height:1.5}
+.errpage{text-align:center;padding-top:18vh}
+.errpage .acts{justify-content:center;margin-top:16px}
+
+/* ===== V2.3: phone layout (360 px), keyboard-aware chat, chat redesign ===== */
+.logwrap{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.chatsheet{display:flex;flex-direction:column}
+.chatsheet .log{flex:1 1 auto;min-height:90px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.cfilter{flex:none}
+.chatsheet .m{position:relative;padding:6px 34px 6px 10px;max-width:90%}
+.chatsheet .m.cont{margin-top:-2px;border-top-left-radius:6px}
+.chatsheet .m.me.cont{border-top-left-radius:12px;border-top-right-radius:6px}
+.mhead{display:flex;align-items:baseline;gap:8px;margin-bottom:1px}
+.mhead time{color:var(--mute);font-size:11px;margin-left:auto}
+.mtext{overflow-wrap:anywhere;line-height:1.4}
+.mtext a{color:#9fd8ff;text-decoration:underline;text-underline-offset:2px}
+.chatsheet .mmore{position:absolute;top:2px;right:2px}
+.mplay{display:inline-block;margin-top:5px;background:rgba(255,90,200,.18);border:1px solid rgba(255,90,200,.5);border-radius:99px;color:var(--ink);padding:5px 12px;font-size:13px;cursor:pointer}
+.sysline{align-self:center;max-width:94%;text-align:center;font-size:12px;color:var(--mute);padding:2px 8px}
+.sysline b{color:var(--brass2);font-weight:600}
+.jump{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);background:var(--brass);color:#14110a;border:0;border-radius:99px;padding:6px 14px;font-weight:600;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.4);cursor:pointer;z-index:2}
+.ac{display:flex;flex-direction:column;gap:2px;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:12px;padding:4px;flex:none}
+.ac button{background:none;border:0;color:var(--ink);text-align:left;padding:8px 10px;border-radius:8px;font-size:14px;cursor:pointer}
+.ac button:hover,.ac button:focus-visible{background:rgba(255,255,255,.1)}
+.chatsheet .send,.chatsheet .tray,.chatsheet .replychip,.chatsheet .typing,.chatsheet .rxpick.quick{flex:none}
+.camctl button.on{background:rgba(94,242,200,.25);border-color:#5ef2c8}
+
+@media(max-width:560px){
+  /* chat becomes a full-width bottom panel that sits above the keyboard */
+  .chatsheet{left:0;right:0;width:100%;bottom:0;height:min(80%,calc(100% - 56px));max-height:none;border-radius:20px 20px 0 0;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));gap:6px;overflow:hidden}
+  .stage.chatopen .dock,.stage.chatopen .hudbottom,.stage.chatopen .camctl,.stage.chatopen .joy,.stage.chatopen .pad,.stage.chatopen .skybtn{display:none}
+  .stage.kbopen .chatsheet{bottom:var(--kb,0px);height:calc(var(--vvh,100dvh) - 64px)}
+  .chatsheet .m{max-width:94%}
+  .chatsheet .send .btn:not(.sm){padding-left:14px;padding-right:14px}
+  /* other panels: a little narrower than the screen, never wider */
+  .sheet{width:calc(100% - 16px)}
+  .tab{font-size:11px}
+  .cinebar{flex-wrap:wrap}
+  .quizq{font-size:17px}
+}
+@media(max-width:400px){
+  /* 360 px phones */
+  .dock{padding:5px;gap:0;max-width:calc(100% - 8px)}
+  .dock .dk{min-width:0;flex:1 1 0;padding:6px 3px}
+  .hudtop{left:8px;right:8px}
+  .hudbottom{left:8px;right:8px}
+  .nowplaying{padding:6px 10px}
+  .wcard{padding:16px}
+  .wcard h3{font-size:19px}
+  .mgrid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:760px){
+  /* camera buttons go to the left so they never sit on top of the joystick */
+  .camctl{right:auto;left:10px;top:50%;bottom:auto;transform:translateY(-50%)}
+}
+@media(max-height:520px){.hudtop{max-height:calc(100dvh - 120px)}.welcome .wcard{max-height:96%}}
