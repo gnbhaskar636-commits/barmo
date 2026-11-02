@@ -12,7 +12,7 @@ import { makeRealism, shade } from "@/lib/world/realism";
 import { addNpcs } from "@/lib/world/npcs";
 import { disposeCup, drinkById, makeCup } from "@/lib/world/drinks";
 import { addVideoWall, makeVideoOverlay, videoSpec } from "@/lib/world/videoWall";
-import { PITCH_DEFAULT, PITCH_MAX, PITCH_MIN, ZOOM_MAX, ZOOM_MIN, clamp, loadControls, moveVector, nextCamMode, orbitOffset, type CamControls, type CamMode } from "@/lib/world/controls";
+import { gyroDelta, PITCH_DEFAULT, PITCH_MAX, PITCH_MIN, ZOOM_MAX, ZOOM_MIN, clamp, loadControls, moveVector, nextCamMode, orbitOffset, type CamControls, type CamMode } from "@/lib/world/controls";
 import type { VideoSrc } from "@/lib/world/screens";
 import { addConnect, type LinkNode } from "@/lib/world/connect";
 import { addTerrace, onTerrace } from "@/lib/world/terrace";
@@ -129,6 +129,8 @@ export interface World {
   snapshot: () => Promise<Blob | null>;
   /** Apply new control settings (sensitivity, invert, classic style, follow). */
   setControls: (c: CamControls) => void;
+  /** Look around by moving the phone (asks permission on iPhone). Resolves to whether it is on. */
+  setGyro: (on: boolean) => Promise<boolean>;
   /** Camera helpers for the on-screen buttons. */
   camera: (a: "cycle" | "reset" | "in" | "out") => CamMode;
 }
@@ -342,7 +344,7 @@ export function runWorld(
   if (!webglAvailable()) {
     host.innerHTML =
       '<div class="empty" style="margin:20px">3D is not available in this browser. Turn on hardware acceleration or try a current version of Chrome, Edge, Firefox or Safari.</div>';
-    return { destroy: () => {}, applyPeerState: () => {}, removePeer: () => {}, say: () => {}, emote: () => {}, teleport: () => {}, setTheme: () => {}, burst: () => {}, shout: () => {}, emoteAll: () => {}, interact: () => {}, react: () => {}, setSpeaking: () => {}, setQuality: () => {}, sitNearest: () => false, stand: () => {}, setBoard: () => {}, setDrink: () => {}, setVideo: () => {}, setVideoInteractive: () => {}, setVideoHidden: () => {}, snapshot: () => Promise.resolve(null), setControls: () => {}, camera: () => "follow" };
+    return { destroy: () => {}, applyPeerState: () => {}, removePeer: () => {}, say: () => {}, emote: () => {}, teleport: () => {}, setTheme: () => {}, burst: () => {}, shout: () => {}, emoteAll: () => {}, interact: () => {}, react: () => {}, setSpeaking: () => {}, setQuality: () => {}, sitNearest: () => false, stand: () => {}, setBoard: () => {}, setDrink: () => {}, setVideo: () => {}, setVideoInteractive: () => {}, setVideoHidden: () => {}, snapshot: () => Promise.resolve(null), setControls: () => {}, camera: () => "follow", setGyro: () => Promise.resolve(false) };
   }
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -536,6 +538,20 @@ export function runWorld(
     me.visible = m !== "first";
     opts.onCamMode?.(m);
   };
+  // Phone motion: turning the phone turns the camera (first person feels most natural).
+  let gyroOn = false;
+  let gPrev: { a: number; b: number } | null = null;
+  const onOrient = (e: DeviceOrientationEvent) => {
+    if (!gyroOn || ctl.classic || e.alpha == null || e.beta == null) return;
+    const cur = { a: e.alpha, b: e.beta };
+    const d = gyroDelta(gPrev, cur);
+    gPrev = cur;
+    camYaw += d.dYaw;
+    const inv = ctl.invertY ? -1 : 1;
+    if (camMode === "first") fpPitch = clamp(fpPitch + d.dPitch * inv, -1.1, 1.1);
+    else camPitch = clamp(camPitch - d.dPitch * inv, PITCH_MIN, PITCH_MAX);
+  };
+  addEventListener("deviceorientation", onOrient);
   const resetCam = () => {
     camYaw = yaw;
     camPitch = PITCH_DEFAULT;
@@ -1130,6 +1146,7 @@ export function runWorld(
   return {
     destroy() {
       cancelAnimationFrame(raf);
+      removeEventListener("deviceorientation", onOrient);
       removeEventListener("keydown", kd);
       removeEventListener("keyup", kd);
       ro.disconnect();
@@ -1266,6 +1283,23 @@ export function runWorld(
     },
     setControls(c) {
       ctl = c;
+    },
+    async setGyro(on) {
+      if (!on) {
+        gyroOn = false;
+        gPrev = null;
+        return false;
+      }
+      const DO = (typeof DeviceOrientationEvent !== "undefined" ? DeviceOrientationEvent : null) as null | { requestPermission?: () => Promise<string> };
+      if (!DO) return false;
+      try {
+        if (typeof DO.requestPermission === "function" && (await DO.requestPermission()) !== "granted") return false;
+      } catch {
+        return false;
+      }
+      gPrev = null;
+      gyroOn = true;
+      return true;
     },
     camera(a) {
       if (a === "cycle") setMode(nextCamMode(camMode));

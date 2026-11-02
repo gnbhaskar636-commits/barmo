@@ -1,7 +1,24 @@
-# BARMO Lounge V2.1 — 3D lounge + community
+# BARMO Lounge V2.3 — 3D lounge + community
 
 Open the site, pick a name and avatar, walk around a shared 3D lounge, and meet people live.
 No sign-up. Real-time uses Supabase Realtime only (no database tables).
+
+## What is new in V2.3: phone view and a new chat
+
+- **Built for 360 px phones.** The camera buttons moved to the left so they no longer sit on the joystick, the dock shares the width evenly, sheets never exceed the screen, and the top and bottom HUD areas tighten up on small screens.
+- **Chat that works with the keyboard.** On phones chat opens as a full-width panel; when the keyboard appears the panel lifts above it (uses the browser's visual viewport), so the box you type in is never hidden. The dock and game controls get out of the way while chat is open.
+- **Properly aligned messages.** Own messages on the right, others on the left, consecutive messages from one person grouped under one name, a time on each group, and centred grey lines for events (hand raised, pinned message, screen and trivia notices).
+- **New chat features.** Tappable links (only http/https, opened safely) with a *Play on the big screen* button on video links; typing `@` suggests the people here and `/` suggests commands; a *Mentions* tab; a *N new* button when you have scrolled up instead of being yanked to the bottom.
+- **Phone motion look.** On phones a 📱 button (and a Menu, Controls checkbox) lets you look around by moving the phone; iPhones ask for motion permission first. Hold the phone upright. It works with the Free camera, not the Classic style.
+- Code: `lib/world/chatText.ts` and `gyroDelta` in `lib/world/controls.ts` (21 new tests, 116 in total), chat panel in `components/WorldView.tsx`, "V2.3" section of `app/globals.css`.
+
+## What is new in V2.2: launch-ready
+
+- **Setup check** at `/setup` (`/api/health`): a checklist of what is connected (live multiplayer, AI, video, report delivery) with what each unlocks and exactly what to add if something is missing. It only says whether a setting exists, never its value.
+- **Send feedback** in the world Menu (`/api/feedback`): players pick Bug / Idea / Confusing / Love it, optionally attach version, world, screen size and browser. Goes to the server log and, if `REPORT_WEBHOOK_URL` is set, to your Discord or Slack. The same endpoint receives crash reports.
+- **Crash screen** (`app/error.tsx`): a friendly page with *Try again*, *Reload* and *Send an error report* instead of a blank page.
+- **Automatic checks on GitHub** (`.github/workflows/ci.yml`): every pull request runs the type check, the tests and a full production build, so a broken change is caught before it reaches your live site.
+- **Tests** (`npm test`, 116 checks in `tests/`): trivia, controls, safe video links, the code lab (every challenge, using the real runner), Nova's offline answers and the setup check. Run `npm install` once first (adds the small `tsx` tool).
 
 ## What is new in V2.1: better controls
 

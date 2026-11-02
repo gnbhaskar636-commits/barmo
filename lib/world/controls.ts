@@ -68,3 +68,15 @@ export function moveVector(f: number, s: number, camYaw: number): { x: number; z
 export function orbitOffset(yaw: number, pitch: number, dist: number) {
   return { x: -Math.sin(yaw) * Math.cos(pitch) * dist, y: Math.sin(pitch) * dist, z: -Math.cos(yaw) * Math.cos(pitch) * dist };
 }
+
+/**
+ * Phone-motion look: change between two readings of the phone's orientation (degrees).
+ * alpha = compass turn (wraps at 360), beta = tilt forward/back. Returns radians; big jumps are ignored.
+ */
+export function gyroDelta(prev: { a: number; b: number } | null, cur: { a: number; b: number }): { dYaw: number; dPitch: number } {
+  if (!prev) return { dYaw: 0, dPitch: 0 };
+  const da = ((cur.a - prev.a + 540) % 360) - 180;
+  const db = cur.b - prev.b;
+  if (Math.abs(da) > 45 || Math.abs(db) > 45) return { dYaw: 0, dPitch: 0 };
+  return { dYaw: (da * Math.PI) / 180, dPitch: (db * Math.PI) / 180 };
+}
