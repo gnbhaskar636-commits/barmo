@@ -1,5 +1,6 @@
 "use client";
 
+import { LogoMark } from "@/components/Logo";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { runWorld } from "@/lib/world/world";
@@ -37,13 +38,14 @@ export default function HomeView() {
   return (
     <div className="home">
       <header className="top">
-        <span className="logo">BARMO</span>
+        <span className="logo"><LogoMark size={32} /><span>BARMO</span></span>
         <span className="pill">Open lounge · no sign-up</span>
       </header>
       <section className="hero">
         <div className="join">
           <h1>Meet people where the conversation happens.</h1>
           <p>A shared 3D lounge. Pick a name and an avatar, walk in, and see everyone who is there right now.</p>
+          <div className="featrow" aria-label="What you can do here"><span>🎬 Watch together</span><span>🧠 Trivia night</span><span>🤖 AI crew</span><span>💻 Code lab</span></div>
           <label className="lbl" htmlFor="nm">Your name</label>
           <input id="nm" className="inp" maxLength={20} placeholder="e.g. Bhaskar" value={name}
             onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && enter()} />
@@ -55,7 +57,7 @@ export default function HomeView() {
               </button>
             ))}
           </div>
-          <div className="row">
+          <div className="cta">
             <button className="btn" onClick={enter}>Enter the lounge</button>
             <button className="btn g" onClick={() => router.push("/explore")}>Just look around</button>
             <button className="btn g" onClick={() => router.push("/community")}>Community</button>

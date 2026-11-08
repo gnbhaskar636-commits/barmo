@@ -1467,7 +1467,7 @@ export default function WorldView() {
         );
       })()}
       <div className="hudbottom">
-      {tip && !panel && !huddle && <div className="tip">Tap the floor to walk · drag to look around · tap a chair to sit</div>}
+      {tip && !panel && !huddle && <div className="tip"><span className="tip-l">Tap the floor to walk · drag to look around · tap a chair to sit</span><span className="tip-s">Tap to walk · drag to look</span></div>}
       {room === "party" && !track && !panel && !huddle && !tip && (
         <button className="partyhint" onClick={() => setPanel("orb")}>🎧 Pick a song · the whole room changes with the music</button>
       )}
@@ -1966,7 +1966,7 @@ export default function WorldView() {
 
       {welcome && (
         <div className="welcome" role="dialog" aria-modal="true" aria-label="Welcome guide">
-          <div className="wcard">
+          <div className="welcomecard">
             <h3>Welcome to {def.name} 👋</h3>
             <ul className="wsteps">
               <li><span aria-hidden="true">👆</span><div><b>Walk and look around</b><small>Tap the floor, or use the joystick or W A S D. Drag to look all the way around, scroll or pinch to zoom.</small></div></li>

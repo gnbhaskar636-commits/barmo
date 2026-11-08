@@ -106,12 +106,12 @@ export default function MeetPanel({ name, blocked, muted, onJoin }: { name: stri
         <div className="mgrid" ref={hostRef} />
         {live && (
           <div className="mbar">
-            <button className={"mb" + (st.mic ? "" : " off")} aria-pressed={st.mic} aria-label={st.mic ? "Mute microphone" : "Unmute microphone"} onClick={() => void ctl.current?.setMic(!st.mic)}>{st.mic ? "🎙️" : "🔇"}</button>
-            <button className={"mb" + (st.cam ? "" : " off")} aria-pressed={st.cam} aria-label={st.cam ? "Turn camera off" : "Turn camera on"} onClick={() => void ctl.current?.setCam(!st.cam)}>{st.cam ? "📷" : "🚫"}</button>
+            <button className={"mtb" + (st.mic ? "" : " off")} aria-pressed={st.mic} aria-label={st.mic ? "Mute microphone" : "Unmute microphone"} onClick={() => void ctl.current?.setMic(!st.mic)}>{st.mic ? "🎙️" : "🔇"}</button>
+            <button className={"mtb" + (st.cam ? "" : " off")} aria-pressed={st.cam} aria-label={st.cam ? "Turn camera off" : "Turn camera on"} onClick={() => void ctl.current?.setCam(!st.cam)}>{st.cam ? "📷" : "🚫"}</button>
             {canShare && (
-              <button className={"mb" + (st.share ? " on" : "")} aria-pressed={st.share} aria-label={st.share ? "Stop sharing screen" : "Share screen"} onClick={() => void ctl.current?.setShare(!st.share)}>🖥️</button>
+              <button className={"mtb" + (st.share ? " on" : "")} aria-pressed={st.share} aria-label={st.share ? "Stop sharing screen" : "Share screen"} onClick={() => void ctl.current?.setShare(!st.share)}>🖥️</button>
             )}
-            <button className="mb leave" aria-label="Leave meeting" onClick={leave}>📞</button>
+            <button className="mtb leave" aria-label="Leave meeting" onClick={leave}>📞</button>
           </div>
         )}
         {live && st.err && <div className="merr">{st.err}</div>}

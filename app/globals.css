@@ -546,9 +546,9 @@ main>*{animation:rise .4s ease both}
 .nowplaying .np-t{display:flex;flex-direction:column;line-height:1.2;min-width:0}
 .nowplaying .np-t b{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nowplaying .np-t small{color:var(--mute);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.eq{display:flex;align-items:flex-end;gap:2px;height:18px;flex:none}
-.eq i{display:block;width:3px;height:100%;background:var(--brass2);border-radius:2px;transform-origin:bottom;animation:eqb .9s ease-in-out infinite}
-.eq i:nth-child(2){animation-delay:-.3s}.eq i:nth-child(3){animation-delay:-.6s}.eq i:nth-child(4){animation-delay:-.15s}
+.nowplaying .eq{display:flex;align-items:flex-end;gap:2px;height:18px;flex:none}
+.nowplaying .eq i{display:block;width:3px;height:100%;background:var(--brass2);border-radius:2px;transform-origin:bottom;animation:eqb .9s ease-in-out infinite}
+.nowplaying .eq i:nth-child(2){animation-delay:-.3s}.nowplaying .eq i:nth-child(3){animation-delay:-.6s}.nowplaying .eq i:nth-child(4){animation-delay:-.15s}
 @keyframes eqb{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
 @keyframes npIn{from{opacity:0;transform:translateY(-8px) scale(.94)}to{opacity:1;transform:none}}
 .partyhint{position:absolute;left:0;right:0;margin:0 auto;width:max-content;max-width:calc(100% - 24px);top:68px;z-index:4;background:linear-gradient(90deg,rgba(255,90,200,.25),rgba(62,200,255,.25));border:1px solid rgba(255,90,200,.55);border-radius:99px;padding:8px 18px;font-size:13px;color:#ffe3f6;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:hintPulse 2.4s ease-in-out infinite}
@@ -579,14 +579,14 @@ main>*{animation:rise .4s ease both}
 .mt .mt-name{position:absolute;left:6px;bottom:6px;max-width:calc(100% - 12px);display:flex;gap:5px;align-items:center;font-size:12px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:99px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .mt .mt-mic:empty{display:none}
 .mbar{display:flex;justify-content:center;gap:10px}
-.mb{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.08);font-size:19px;cursor:pointer;color:var(--ink);transition:transform .15s,background .2s;touch-action:manipulation}
-.mb:hover{background:rgba(255,255,255,.16)}.mb:active{transform:scale(.9)}
-.mb.off{background:#7a2f33;border-color:#d98b84}
-.mb.on{background:#25507f;border-color:#6bb5ff}
-.mb.leave{background:#c0392b;border-color:#e57368;width:58px;border-radius:23px}
+.mtb{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.08);font-size:19px;cursor:pointer;color:var(--ink);transition:transform .15s,background .2s;touch-action:manipulation}
+.mtb:hover{background:rgba(255,255,255,.16)}.mtb:active{transform:scale(.9)}
+.mtb.off{background:#7a2f33;border-color:#d98b84}
+.mtb.on{background:#25507f;border-color:#6bb5ff}
+.mtb.leave{background:#c0392b;border-color:#e57368;width:58px;border-radius:23px}
 .meet .merr{font-size:12px;color:#ffd0cc;text-align:center}
 @media(max-width:760px){.meet{left:12px;right:12px;width:auto;top:60px}.mgrid{max-height:36dvh}.nowplaying{top:60px}}
-@media(prefers-reduced-motion:reduce){.eq i,.partyhint,.nowplaying,.meet,.meetask{animation:none}.entering .ei{animation:none}}
+@media(prefers-reduced-motion:reduce){.nowplaying .eq i,.partyhint,.nowplaying,.meet,.meetask{animation:none}.entering .ei{animation:none}}
 
 /* ===== v1.1: cinema, AI class, NPC dialogue ===== */
 .cinema{position:absolute;left:0;right:0;margin:0 auto;top:64px;z-index:6;width:min(640px,calc(100% - 24px));display:flex;flex-direction:column;gap:8px;padding:10px;background:rgba(14,10,24,.86);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,90,200,.5);border-radius:18px;box-shadow:0 16px 44px rgba(0,0,0,.5);animation:npIn .35s ease both;max-height:calc(100dvh - 190px);overflow-y:auto}
@@ -727,8 +727,8 @@ main>*{animation:rise .4s ease both}
 
 /* First visit welcome */
 .welcome{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,7,14,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:npIn .3s ease both}
-.wcard{width:min(440px,100%);max-height:100%;overflow:auto;padding:20px;border-radius:20px;background:var(--glass2);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:12px}
-.wcard h3{margin:0;font:600 22px Fraunces,Georgia,serif}
+.welcomecard{width:min(440px,100%);max-height:100%;overflow:auto;padding:20px;border-radius:20px;background:var(--glass2);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:12px}
+.welcomecard h3{margin:0;font:600 22px Fraunces,Georgia,serif}
 .wsteps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
 .wsteps li{display:flex;gap:12px;align-items:flex-start}
 .wsteps li>span{font-size:24px;width:34px;text-align:center}
@@ -761,8 +761,8 @@ main>*{animation:rise .4s ease both}
 
 /* ===== V2.2: setup check, error page, feedback ===== */
 .fbbox{width:100%;resize:vertical;font:inherit;font-size:14px;line-height:1.45;background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0}
-.setup,.errpage{max-width:720px;margin:0 auto;padding:28px 16px 60px;color:var(--ink)}
-.setup h1,.errpage h1{font:600 30px Fraunces,Georgia,serif;margin:0 0 6px}
+.setuppage,.errpage{max-width:720px;margin:0 auto;padding:28px 16px 60px;color:var(--ink)}
+.setuppage h1,.errpage h1{font:600 30px Fraunces,Georgia,serif;margin:0 0 6px}
 .setupsum{margin:14px 0;padding:12px 14px;border-radius:14px;border:1px solid var(--line);font-size:15px}
 .setupsum.ok{border-color:#5ef2c8;background:rgba(94,242,200,.1)}.setupsum.bad{border-color:#ff8a80;background:rgba(255,138,128,.1)}
 .setupsum small{display:block;color:var(--mute);margin-top:4px}
@@ -815,12 +815,59 @@ main>*{animation:rise .4s ease both}
   .hudtop{left:8px;right:8px}
   .hudbottom{left:8px;right:8px}
   .nowplaying{padding:6px 10px}
-  .wcard{padding:16px}
-  .wcard h3{font-size:19px}
+  .welcomecard{padding:16px}
+  .welcomecard h3{font-size:19px}
   .mgrid{grid-template-columns:1fr 1fr}
 }
 @media(max-width:760px){
   /* camera buttons go to the left so they never sit on top of the joystick */
   .camctl{right:auto;left:10px;top:50%;bottom:auto;transform:translateY(-50%)}
 }
-@media(max-height:520px){.hudtop{max-height:calc(100dvh - 120px)}.welcome .wcard{max-height:96%}}
+@media(max-height:520px){.hudtop{max-height:calc(100dvh - 120px)}.welcome .welcomecard{max-height:96%}}
+
+
+/* ===== V2.4: alignment that fixes itself, logo, landing polish ===== */
+/* Layout helpers: children can shrink (so text never collapses into one-letter columns) and rows wrap neatly */
+.row2{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.row2>.grow{flex:1 1 140px;min-width:0}
+.btnrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.btnrow .btn{width:100%}
+.stack2{display:flex;flex-direction:column;gap:10px}
+
+/* Chat pages (Community, Groups, People): rows may shrink and long words wrap instead of breaking letter by letter */
+.thread .cm{min-width:0}
+.thread .cm>.mb{min-width:0;overflow-wrap:anywhere}
+.thread .nm{overflow-wrap:anywhere}
+.tabs2{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+.tabs2::-webkit-scrollbar{display:none}
+.tabs2>button{flex:none;white-space:nowrap;scroll-snap-align:start}
+.dmhead{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.dmhead .btn{flex:none;white-space:nowrap}
+.dmhead .back{order:-1}
+.dmhead>b{flex:1 1 120px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:17px}
+.dmhead .sp{display:none}
+
+/* Logo */
+.logo{display:inline-flex;align-items:center;gap:10px}
+.logomark{flex:none;border-radius:22%;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.nav.app .logo{margin:0 0 14px;gap:8px}
+
+/* Landing page */
+.home{position:relative;isolation:isolate;overflow-x:clip}
+.home::before{content:"";position:absolute;inset:-6% 0 auto 0;height:70%;z-index:-1;pointer-events:none;background:radial-gradient(60% 60% at 22% 22%,rgba(200,162,107,.17),transparent 70%),radial-gradient(50% 50% at 88% 8%,rgba(107,140,255,.13),transparent 70%);animation:homeGlow 16s ease-in-out infinite alternate}
+@keyframes homeGlow{to{transform:translate3d(0,16px,0) scale(1.05)}}
+.featrow{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 16px}
+.featrow span{font-size:12.5px;padding:5px 11px;border-radius:99px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink)}
+.avr{display:grid;grid-template-columns:repeat(auto-fit,minmax(116px,1fr));gap:8px}
+.avr .avc{width:100%;justify-content:flex-start}
+.cta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.cta .btn{width:100%}
+.cta .btn:first-child{grid-column:1/-1}
+.cta .btn:not(:first-child){padding-left:8px;padding-right:8px;font-size:14.5px;white-space:nowrap}
+
+/* World: the hint never sits on the joystick or the sky button on phones */
+.tip-s{display:none}
+@media(pointer:coarse){.hudbottom{bottom:calc(var(--dock-h) + 8px + 112px + env(safe-area-inset-bottom,0px))}}
+@media(max-width:560px){.tip-l{display:none}.tip-s{display:inline}.hudbottom .tip{font-size:12.5px;padding:7px 14px;text-align:center;white-space:normal}}
+@media(max-width:400px){.dock .dk{font-size:10.5px;letter-spacing:-.1px;min-width:47px}.dock .dk span{font-size:19px}}
+@media(prefers-reduced-motion:reduce){.home::before{animation:none}}

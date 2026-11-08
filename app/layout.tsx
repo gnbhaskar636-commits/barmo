@@ -8,7 +8,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "BARMO",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon-192.png", apple: "/apple-touch-icon.png" },
+  icons: { icon: [{ url: "/logo.svg", type: "image/svg+xml" }, { url: "/icon-192.png", sizes: "192x192", type: "image/png" }], apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "BARMO", statusBarStyle: "black-translucent" },
   description:
     "BARMO is a shared 3D lounge for professionals. Walk in as an avatar, find people worth knowing, and turn a hello into a connection.",

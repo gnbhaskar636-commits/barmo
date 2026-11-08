@@ -1,5 +1,6 @@
 "use client";
 
+import { LogoMark } from "@/components/Logo";
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useHub } from "@/components/HubProvider";
@@ -78,7 +79,7 @@ export default function AppShell({ children, wide }: { children: ReactNode; wide
   return (
     <>
       <nav className="nav app" aria-label="Main">
-        <button className="logo" onClick={() => go("/")}>BARMO</button>
+        <button className="logo" onClick={() => go("/")} aria-label="BARMO home"><LogoMark size={26} /><span>BARMO</span></button>
         <div className="items">
           {items.map((it) => (
             <button key={it.k} aria-current={on(it.k)} onClick={() => go(it.to)}>

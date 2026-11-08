@@ -15,7 +15,7 @@ export default function SetupPage() {
       .catch(() => setErr("Could not load the setup check."));
   }, []);
   return (
-    <main className="setup">
+    <main className="setuppage">
       <h1>Setup check</h1>
       <p className="hint">Shows which services are connected. It only says whether each setting exists, never its value.</p>
       {err && <p className="merr">{err}</p>}

@@ -1,7 +1,7 @@
 import { summary } from "./_t";
 
 /** Runs every test file. `npm test` */
-const files = ["./quiz.test", "./controls.test", "./screens.test", "./codelab.test", "./health.test", "./chat.test"];
+const files = ["./quiz.test", "./controls.test", "./screens.test", "./codelab.test", "./health.test", "./chat.test", "./css.test"];
 (async () => {
   for (const f of files) {
     const m = (await import(f)) as { run: () => Promise<void> };

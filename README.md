@@ -1,7 +1,16 @@
-# BARMO Lounge V2.3 — 3D lounge + community
+# BARMO Lounge V2.4 — 3D lounge + community
 
 Open the site, pick a name and avatar, walk around a shared 3D lounge, and meet people live.
 No sign-up. Real-time uses Supabase Realtime only (no database tables).
+
+## What is new in V2.4: alignment fixes, new logo, landing polish
+
+- **Root cause of the broken Community / Groups / People chat on phones:** the video-meeting toolbar (added earlier) used the style name `.mb`, which the chat pages already used for message bubbles, so every bubble became a 46 px circle and text broke one letter per line. The meeting toolbar is now `.mtb`. Three other style names also clashed and are fixed: `.setup` (setup banner), `.wcard` (world cards) and `.eq` (equipped Shop items).
+- **Automatic guard** (`tests/css.test.ts`, part of `npm test` and the GitHub check): a new style that reuses an original class name on its own now fails the build unless it is listed as intentional with a reason. Re-adding the old `.mb` rule was confirmed to fail it.
+- **Alignment that adjusts itself:** chat rows can shrink and long words wrap; Community channel tabs stay on one scrolling row; the Groups header keeps its buttons the same height and lets the title wrap onto its own line; landing buttons are one full-width primary plus two equal secondary buttons; the avatar picker is a tidy grid; the world hint bar sits clear of the joystick and sky button; bottom-bar buttons keep a 47 px minimum width. Helper classes `.row2`, `.btnrow`, `.stack2` give new screens the same behaviour.
+- **New logo:** a brass "B" inside an orbit with a small moon, on the night-blue tile (`components/Logo.tsx`, `public/logo.svg`, regenerated app, maskable and Apple icons). Shown in the app header and on the landing page.
+- **Landing page:** soft animated glow behind the headline (switched off for reduced motion), feature chips (Watch together, Trivia night, AI crew, Code lab). Wording and layout are otherwise unchanged.
+- Checked in a 360 px browser against the real stylesheet: no page scrolls sideways and no controls overlap at 360, 390 and 412 px wide.
 
 ## What is new in V2.3: phone view and a new chat
 
@@ -18,7 +27,7 @@ No sign-up. Real-time uses Supabase Realtime only (no database tables).
 - **Send feedback** in the world Menu (`/api/feedback`): players pick Bug / Idea / Confusing / Love it, optionally attach version, world, screen size and browser. Goes to the server log and, if `REPORT_WEBHOOK_URL` is set, to your Discord or Slack. The same endpoint receives crash reports.
 - **Crash screen** (`app/error.tsx`): a friendly page with *Try again*, *Reload* and *Send an error report* instead of a blank page.
 - **Automatic checks on GitHub** (`.github/workflows/ci.yml`): every pull request runs the type check, the tests and a full production build, so a broken change is caught before it reaches your live site.
-- **Tests** (`npm test`, 116 checks in `tests/`): trivia, controls, safe video links, the code lab (every challenge, using the real runner), Nova's offline answers and the setup check. Run `npm install` once first (adds the small `tsx` tool).
+- **Tests** (`npm test`, 122 checks in `tests/`): trivia, controls, safe video links, the code lab (every challenge, using the real runner), Nova's offline answers and the setup check. Run `npm install` once first (adds the small `tsx` tool).
 
 ## What is new in V2.1: better controls
 
