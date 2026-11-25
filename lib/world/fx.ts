@@ -110,3 +110,326 @@ export function addRing(g: THREE.Group, color: number) {
   g.add(pivot);
   g.userData.ringPivot = pivot;
 }
+
+// =============================================================================
+// HIGH-ENERGY VISUAL FX FOR RIGGED LOCOMOTION & COMBAT/ACTIONS
+// =============================================================================
+
+export interface DashTrailEmitter {
+  update: (dt: number, avatarPos: THREE.Vector3, isSprinting: boolean) => void;
+  dispose: () => void;
+  getActiveCount: () => number;
+}
+
+/**
+ * Creates high-energy dash speed trail particle emitter.
+ * Spawns electric violet (#8b5cf6) and cyan (#06b6d4) glowing motes behind avatar during sprint.
+ */
+export function createDashTrail(scene: THREE.Scene, color?: number): DashTrailEmitter {
+  const POOL_SIZE = 90;
+  const positions = new Float32Array(POOL_SIZE * 3);
+  const colors = new Float32Array(POOL_SIZE * 3);
+  const lifetimes = new Float32Array(POOL_SIZE); // remaining seconds
+  const velocities = new Float32Array(POOL_SIZE * 3);
+
+  const baseCol1 = color ? new THREE.Color(color) : new THREE.Color(0x8b5cf6); // Electric Violet
+  const baseCol2 = new THREE.Color(0x06b6d4); // Cyan
+
+  // Initialize all particles inactive below ground
+  for (let i = 0; i < POOL_SIZE; i++) {
+    positions[i * 3 + 1] = -999;
+    lifetimes[i] = 0;
+    const c = i % 2 === 0 ? baseCol1 : baseCol2;
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(positions, 3);
+  const colAttr = new THREE.BufferAttribute(colors, 3);
+  geometry.setAttribute("position", posAttr);
+  geometry.setAttribute("color", colAttr);
+
+  const material = new THREE.PointsMaterial({
+    size: 0.16,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.95,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const points = new THREE.Points(geometry, material);
+  points.name = "DashTrailPoints";
+  scene.add(points);
+
+  let nextIdx = 0;
+  let spawnAccumulator = 0;
+
+  const update = (dt: number, avatarPos: THREE.Vector3, isSprinting: boolean) => {
+    // Spawn new motes when sprinting
+    if (isSprinting) {
+      spawnAccumulator += dt;
+      const spawnInterval = 0.025; // ~40 particles / sec
+      while (spawnAccumulator >= spawnInterval) {
+        spawnAccumulator -= spawnInterval;
+        const i = nextIdx;
+        nextIdx = (nextIdx + 1) % POOL_SIZE;
+
+        lifetimes[i] = 0.35; // 350ms duration
+        // Spawn slightly behind and around avatar feet
+        positions[i * 3] = avatarPos.x + (Math.random() - 0.5) * 0.35;
+        positions[i * 3 + 1] = avatarPos.y + 0.08 + Math.random() * 0.3;
+        positions[i * 3 + 2] = avatarPos.z + (Math.random() - 0.5) * 0.35;
+
+        // Upward and slight dispersion drift
+        velocities[i * 3] = (Math.random() - 0.5) * 0.8;
+        velocities[i * 3 + 1] = 0.4 + Math.random() * 0.6;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.8;
+      }
+    } else {
+      spawnAccumulator = 0;
+    }
+
+    // Update active particles
+    let anyActive = false;
+    for (let i = 0; i < POOL_SIZE; i++) {
+      if (lifetimes[i] > 0) {
+        anyActive = true;
+        lifetimes[i] -= dt;
+        if (lifetimes[i] <= 0) {
+          lifetimes[i] = 0;
+          positions[i * 3 + 1] = -999;
+        } else {
+          positions[i * 3] += velocities[i * 3] * dt;
+          positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+          positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+        }
+      }
+    }
+
+    if (isSprinting || anyActive) {
+      posAttr.needsUpdate = true;
+    }
+  };
+
+  const dispose = () => {
+    scene.remove(points);
+    geometry.dispose();
+    material.dispose();
+  };
+
+  const getActiveCount = () => {
+    let count = 0;
+    for (let i = 0; i < POOL_SIZE; i++) {
+      if (lifetimes[i] > 0) count++;
+    }
+    return count;
+  };
+
+  return { update, dispose, getActiveCount };
+}
+
+export interface FootstepSparkEmitter {
+  update: (dt: number, avatarPos: THREE.Vector3, isMoving: boolean) => void;
+  trigger: (pos: THREE.Vector3) => void;
+  dispose: () => void;
+  getActiveCount: () => number;
+}
+
+/**
+ * Creates footstep spark emitter spawning amber & cyan energetic motes on step cadence.
+ */
+export function createFootstepSparks(scene: THREE.Scene): FootstepSparkEmitter {
+  const POOL_SIZE = 50;
+  const positions = new Float32Array(POOL_SIZE * 3);
+  const colors = new Float32Array(POOL_SIZE * 3);
+  const lifetimes = new Float32Array(POOL_SIZE);
+  const velocities = new Float32Array(POOL_SIZE * 3);
+
+  const amber = new THREE.Color(0xf59e0b);
+  const cyan = new THREE.Color(0x06b6d4);
+
+  for (let i = 0; i < POOL_SIZE; i++) {
+    positions[i * 3 + 1] = -999;
+    lifetimes[i] = 0;
+    const c = i % 2 === 0 ? amber : cyan;
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(positions, 3);
+  const colAttr = new THREE.BufferAttribute(colors, 3);
+  geometry.setAttribute("position", posAttr);
+  geometry.setAttribute("color", colAttr);
+
+  const material = new THREE.PointsMaterial({
+    size: 0.1,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.9,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const points = new THREE.Points(geometry, material);
+  points.name = "FootstepSparksPoints";
+  scene.add(points);
+
+  let nextIdx = 0;
+  let cadenceTimer = 0;
+  let footSide = 1;
+
+  const burstAt = (pos: THREE.Vector3, count = 4) => {
+    for (let k = 0; k < count; k++) {
+      const i = nextIdx;
+      nextIdx = (nextIdx + 1) % POOL_SIZE;
+      lifetimes[i] = 0.25 + Math.random() * 0.15;
+      positions[i * 3] = pos.x + (Math.random() - 0.5) * 0.12;
+      positions[i * 3 + 1] = pos.y + 0.04;
+      positions[i * 3 + 2] = pos.z + (Math.random() - 0.5) * 0.12;
+
+      velocities[i * 3] = (Math.random() - 0.5) * 1.5;
+      velocities[i * 3 + 1] = 0.6 + Math.random() * 0.9;
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
+    }
+  };
+
+  const update = (dt: number, avatarPos: THREE.Vector3, isMoving: boolean) => {
+    if (isMoving) {
+      cadenceTimer += dt;
+      if (cadenceTimer >= 0.28) {
+        cadenceTimer = 0;
+        footSide *= -1;
+        const footPos = avatarPos.clone();
+        footPos.x += footSide * 0.14;
+        burstAt(footPos, 3);
+      }
+    } else {
+      cadenceTimer = 0;
+    }
+
+    let anyActive = false;
+    for (let i = 0; i < POOL_SIZE; i++) {
+      if (lifetimes[i] > 0) {
+        anyActive = true;
+        lifetimes[i] -= dt;
+        if (lifetimes[i] <= 0) {
+          lifetimes[i] = 0;
+          positions[i * 3 + 1] = -999;
+        } else {
+          velocities[i * 3 + 1] -= 9.8 * dt; // gravity
+          positions[i * 3] += velocities[i * 3] * dt;
+          positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+          positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+        }
+      }
+    }
+
+    if (isMoving || anyActive) {
+      posAttr.needsUpdate = true;
+    }
+  };
+
+  const trigger = (pos: THREE.Vector3) => {
+    burstAt(pos, 6);
+    posAttr.needsUpdate = true;
+  };
+
+  const dispose = () => {
+    scene.remove(points);
+    geometry.dispose();
+    material.dispose();
+  };
+
+  const getActiveCount = () => {
+    let count = 0;
+    for (let i = 0; i < POOL_SIZE; i++) {
+      if (lifetimes[i] > 0) count++;
+    }
+    return count;
+  };
+
+  return { update, trigger, dispose, getActiveCount };
+}
+
+interface ActiveShockwave {
+  mesh: THREE.Mesh;
+  scene: THREE.Scene;
+  startTime: number;
+  duration: number;
+  maxScale: number;
+}
+
+const activeShockwaves: ActiveShockwave[] = [];
+
+/**
+ * Creates expanding glowing torus shockwave ring with additive blending and opacity fade.
+ * Triggered on jumps, landing, or special actions.
+ */
+export function createActionShockwave(
+  scene: THREE.Scene,
+  position: THREE.Vector3,
+  color = 0x8b5cf6
+): void {
+  const geometry = new THREE.RingGeometry(0.18, 0.32, 32);
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.9,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(position.x, 0.04, position.z);
+  scene.add(mesh);
+
+  activeShockwaves.push({
+    mesh,
+    scene,
+    startTime: performance.now(),
+    duration: 500, // 500ms duration
+    maxScale: 3.8,
+  });
+}
+
+/**
+ * Updates all active action shockwaves in the scene loop.
+ */
+export function updateActionShockwaves(): void {
+  const now = performance.now();
+  for (let i = activeShockwaves.length - 1; i >= 0; i--) {
+    const sw = activeShockwaves[i];
+    const progress = (now - sw.startTime) / sw.duration;
+
+    if (progress >= 1) {
+      sw.scene.remove(sw.mesh);
+      sw.mesh.geometry.dispose();
+      (sw.mesh.material as THREE.Material).dispose();
+      activeShockwaves.splice(i, 1);
+    } else {
+      const scale = 1 + progress * (sw.maxScale - 1);
+      sw.mesh.scale.set(scale, scale, 1);
+      const mat = sw.mesh.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.9 * (1 - progress);
+    }
+  }
+}
+
+/**
+ * Clears and disposes all active action shockwaves.
+ */
+export function clearActionShockwaves(): void {
+  for (const sw of activeShockwaves) {
+    sw.scene.remove(sw.mesh);
+    sw.mesh.geometry.dispose();
+    (sw.mesh.material as THREE.Material).dispose();
+  }
+  activeShockwaves.length = 0;
+}

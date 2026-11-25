@@ -3,38 +3,91 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Check } from "@/lib/health";
+import { BRAND } from "@/lib/brand.config";
 
-/** For the site owner: shows which services are connected and exactly what to add for the rest. */
 export default function SetupPage() {
   const [data, setData] = useState<{ version: string; ready: boolean; checks: Check[] } | null>(null);
   const [err, setErr] = useState("");
+
   useEffect(() => {
     fetch("/api/health", { cache: "no-store" })
       .then((r) => r.json())
       .then(setData)
       .catch(() => setErr("Could not load the setup check."));
   }, []);
+
   return (
-    <main className="setuppage">
-      <h1>Setup check</h1>
-      <p className="hint">Shows which services are connected. It only says whether each setting exists, never its value.</p>
-      {err && <p className="merr">{err}</p>}
-      {!data && !err && <p className="hint">Checking…</p>}
+    <main className="setuppage u3-setup-page-layout">
+      <div className="u3-setup-hero">
+        <div className="u3-spatial-badge">
+          <span className="u3-badge-icon">⚙️</span>
+          <span>SYSTEM DIAGNOSTICS & TELEMETRY</span>
+        </div>
+        <h1>BARMO {BRAND.edition} Infrastructure</h1>
+        <p className="hint">
+          Real-time verification of Supabase Realtime, LiveKit SFU, AI Nova APIs, and Webhooks. No secret tokens are ever displayed.
+        </p>
+      </div>
+
+      {err && <div className="note u3-note-bad">{err}</div>}
+      {!data && !err && <p className="hint u3-loading-text">Querying diagnostic probes...</p>}
+
       {data && (
-        <>
-          <div className={"setupsum " + (data.ready ? "ok" : "bad")}>{data.ready ? "✅ Everything needed is connected. Optional extras are listed below." : "⚠️ Something required is missing. See below."} <small>Version {data.version}</small></div>
-          {data.checks.map((c) => (
-            <section key={c.id} className={"setupcard " + (c.ok ? "ok" : c.required ? "bad" : "warn")}>
-              <h3>{c.ok ? "✅" : c.required ? "❌" : "➕"} {c.label}{c.required ? " · required" : " · optional"}</h3>
-              <p>{c.detail}</p>
-              {!c.ok && <p><b>What it unlocks:</b> {c.unlocks}</p>}
-              {!c.ok && <p><b>How to fix:</b> {c.fix}</p>}
-            </section>
-          ))}
-          <p className="hint">After changing settings in Vercel you must redeploy for them to take effect.</p>
-        </>
+        <div className="u3-setup-content">
+          <div className={"setupsum u3-summary-card " + (data.ready ? "ok" : "bad")}>
+            <div className="u3-sum-header">
+              <span className="u3-sum-icon">{data.ready ? "🟢" : "🟡"}</span>
+              <div>
+                <b>{data.ready ? "Universe 3.0 Ready for Deployment" : "Configuration Action Recommended"}</b>
+                <p>
+                  {data.ready
+                    ? "Core services are verified and operational. Optional integrations are listed below."
+                    : "Some services need environment keys for full cloud synchronization. Local guest mode remains active."}
+                </p>
+              </div>
+            </div>
+            <small className="u3-version-badge">Engine Build: v{data.version}</small>
+          </div>
+
+          <div className="u3-checks-grid">
+            {data.checks.map((c) => (
+              <section key={c.id} className={"setupcard u3-diag-card " + (c.ok ? "ok" : c.required ? "bad" : "warn")}>
+                <div className="u3-diag-header">
+                  <span className="u3-diag-icon">{c.ok ? "✓" : c.required ? "✕" : "＋"}</span>
+                  <div>
+                    <h3>{c.label}</h3>
+                    <span className={`u3-status-pill ${c.ok ? "ok" : "missing"}`}>
+                      {c.ok ? "Active & Linked" : c.required ? "Required" : "Optional"}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="u3-diag-detail">{c.detail}</p>
+                {!c.ok && (
+                  <div className="u3-diag-action-box">
+                    <p><b>Unlocks:</b> {c.unlocks}</p>
+                    <p><b>Configuration:</b> <code>{c.fix}</code></p>
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+
+          <div className="u3-setup-footer">
+            <p className="hint">
+              After adding environment variables in Vercel or your hosting provider, trigger a deployment to activate them.
+            </p>
+            <div className="row">
+              <Link href="/world" className="btn u3-btn-primary">
+                Launch 3D Universe →
+              </Link>
+              <Link href="/" className="btn g">
+                Return to Hub
+              </Link>
+            </div>
+          </div>
+        </div>
       )}
-      <p><Link href="/world" className="btn g">← Back to the world</Link></p>
     </main>
   );
 }

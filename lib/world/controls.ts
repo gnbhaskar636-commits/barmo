@@ -1,4 +1,6 @@
-/** Camera and movement controls: the rules, the settings and their saved values. Pure logic (no three.js), so it can be tested. */
+import * as THREE from "three";
+
+/** Camera and movement controls: the rules, the settings and their saved values. Pure logic, tested. */
 export interface CamControls {
   /** How fast dragging turns the camera (0.4 to 2.5). */
   sens: number;
@@ -79,4 +81,142 @@ export function gyroDelta(prev: { a: number; b: number } | null, cur: { a: numbe
   const db = cur.b - prev.b;
   if (Math.abs(da) > 45 || Math.abs(db) > 45) return { dYaw: 0, dPitch: 0 };
   return { dYaw: (da * Math.PI) / 180, dPitch: (db * Math.PI) / 180 };
+}
+
+// =============================================================================
+// DYNAMIC CAMERA TRAUMA, FOV RUSH & COLLISION ZOOM GUARD
+// =============================================================================
+
+export interface RoomBounds {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  minY?: number;
+  maxY?: number;
+  margin?: number;
+}
+
+let cameraTrauma = 0;
+
+/**
+ * Adds camera trauma in range [0, 1].
+ * Shake intensity equals trauma squared (nonlinear feel).
+ */
+export function applyCameraTrauma(traumaAmount: number): void {
+  if (typeof traumaAmount !== "number" || !Number.isFinite(traumaAmount)) return;
+  cameraTrauma = clamp(cameraTrauma + traumaAmount, 0, 1);
+}
+
+/** Returns the current camera trauma level [0, 1]. */
+export function getCameraTrauma(): number {
+  return cameraTrauma;
+}
+
+/** Resets camera trauma to 0. */
+export function resetCameraTrauma(): void {
+  cameraTrauma = 0;
+}
+
+export interface CameraDynamicsResult {
+  shakeOffset: THREE.Vector3;
+  fov: number;
+  trauma: number;
+}
+
+/**
+ * Updates dynamic camera effects:
+ * - Dynamic FOV rush: expands by +4 degrees when sprinting.
+ * - Trauma decay and rotational/positional camera shake based on trauma^2.
+ */
+export function updateCameraDynamics(
+  camera: THREE.PerspectiveCamera,
+  isSprinting: boolean,
+  dt: number,
+  baseFov = 55
+): CameraDynamicsResult {
+  // FOV rush: +4 deg when sprinting
+  const targetFov = isSprinting ? baseFov + 4 : baseFov;
+  camera.fov += (targetFov - camera.fov) * Math.min(1, 8 * dt);
+  camera.updateProjectionMatrix();
+
+  // Trauma decay: ~1.25 units / sec
+  if (cameraTrauma > 0) {
+    const stepDt = typeof dt === "number" && Number.isFinite(dt) ? dt : 0.016;
+    cameraTrauma = Math.max(0, cameraTrauma - stepDt * 1.25);
+  }
+  if (!Number.isFinite(cameraTrauma)) {
+    cameraTrauma = 0;
+  }
+
+  // Trauma squared for high-energy organic shake feel
+  const shakeIntensity = cameraTrauma * cameraTrauma;
+  const shakeOffset = new THREE.Vector3(
+    (Math.random() - 0.5) * 0.12 * shakeIntensity,
+    (Math.random() - 0.5) * 0.12 * shakeIntensity,
+    (Math.random() - 0.5) * 0.12 * shakeIntensity
+  );
+
+  return { shakeOffset, fov: camera.fov, trauma: cameraTrauma };
+}
+
+/**
+ * Collision zoom guard: checks if the third-person camera position would clip
+ * through room walls. If collision is detected, clamps the camera along the ray
+ * from targetPos (avatar) to cameraPos, keeping a safe margin inside the room.
+ */
+export function checkRoomBoundaryCollision(
+  cameraPos: THREE.Vector3,
+  targetPos: THREE.Vector3,
+  roomBounds: RoomBounds
+): THREE.Vector3 {
+  const margin = typeof roomBounds.margin === "number" ? roomBounds.margin : 0.45;
+  const minX = roomBounds.minX + margin;
+  const maxX = roomBounds.maxX - margin;
+  const minZ = roomBounds.minZ + margin;
+  const maxZ = roomBounds.maxZ - margin;
+
+  // If camera is already well inside bounds, no collision correction needed
+  if (
+    cameraPos.x >= minX &&
+    cameraPos.x <= maxX &&
+    cameraPos.z >= minZ &&
+    cameraPos.z <= maxZ
+  ) {
+    return cameraPos.clone();
+  }
+
+  const dir = new THREE.Vector3().subVectors(cameraPos, targetPos);
+  const totalDist = dir.length();
+  if (totalDist < 1e-4) return cameraPos.clone();
+  dir.normalize();
+
+  // Ray-box intersection from targetPos to find closest wall entry
+  let maxT = totalDist;
+
+  if (dir.x > 1e-5) {
+    const t = (maxX - targetPos.x) / dir.x;
+    if (t >= 0 && t < maxT) maxT = t;
+  } else if (dir.x < -1e-5) {
+    const t = (minX - targetPos.x) / dir.x;
+    if (t >= 0 && t < maxT) maxT = t;
+  }
+
+  if (dir.z > 1e-5) {
+    const t = (maxZ - targetPos.z) / dir.z;
+    if (t >= 0 && t < maxT) maxT = t;
+  } else if (dir.z < -1e-5) {
+    const t = (minZ - targetPos.z) / dir.z;
+    if (t >= 0 && t < maxT) maxT = t;
+  }
+
+  // Safe clamped camera position (guaranteed not to exceed wall intersection maxT)
+  const safeDist = Math.min(totalDist, maxT);
+  const safeX = clamp(targetPos.x + dir.x * safeDist, minX, maxX);
+  const safeZ = clamp(targetPos.z + dir.z * safeDist, minZ, maxZ);
+  return new THREE.Vector3(
+    safeX,
+    cameraPos.y,
+    safeZ
+  );
 }

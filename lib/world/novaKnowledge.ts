@@ -27,11 +27,26 @@ export const APP_KNOWLEDGE = `BARMO Lounge is a 3D social space where people wal
 - Safety: tap a person, then Mute, Block or Report. Spammers are muted automatically. Reports go to the site owner.
 - Graphics: the app starts on Low graphics for weak devices and switches to Low by itself if it runs slowly.
 - Sign-in is switched off for now: everything is saved on this device.
+- Five Native Arcade Games:
+  1. Cyber Dice Duel ('dice'): Quantum Core Roller where players roll dice across rounds; pairs and triples unlock quantum multipliers.
+  2. Neural Quiz Arena ('quiz'): Synchronized speed-trivia with 15s decay timer across AI, space, and science domains.
+  3. Quantum Warp Grand Prix ('race'): Reflex raceway with 2.2-4.8s neon flare; sub-160ms reaction time awards nitro critical.
+  4. Matrix Memory Lock ('memory'): Encrypted 4-glyph cyber cipher sequence memory game.
+  5. Code Lab Speedrun ('cybercode'): Head-to-head competitive algorithmic debugging with automated tests.
+- Tournaments: 8-player and 16-player single-elimination brackets and speedrun ladders with non-negative prize pools.
+- Squads: Form syndicates with up to 8 operatives, role hierarchies (Leader, Officer, Member), and spatial LiveKit voice rooms.
 - Graphics: Menu has a Low graphics option for slow phones. Turning on Reduce motion in the device settings softens the effects.`;
 
 const FAQ: { k: string[]; a: string }[] = [
   { k: ["world", "room", "where", "travel", "teleport"], a: "There are five worlds: Lounge, Meeting Hall, Party Hall, AI Lab and Cosmos. Open the Worlds button (🌐) at the bottom and tap one to travel." },
-  { k: ["walk", "move", "control", "sit", "chair", "talk", "press"], a: "Tap or click the floor to walk, drag to look around, tap a chair to sit, and use the Talk button (or press E) next to a person or the orb." },
+  { k: ["walk", "move", "control", "sit", "chair", "talk", "press", "w a s d"], a: "Tap or click the floor to walk, or use W A S D / arrows / joystick. Drag to look around, tap a chair to sit, and use the Talk button (or press E) next to a person or the orb." },
+  { k: ["dice", "cyber dice", "roller", "roll", "quantum roller"], a: "Cyber Dice Duel: Roll quantum dice each round. Rolling pairs or triples grants high quantum multipliers and jackpot scores. Outscore your rivals across all rounds to win." },
+  { k: ["quiz", "trivia", "neural quiz"], a: "Neural Quiz Arena: Speed-trivia across AI, science, tech and space. Answer within 15 seconds; faster correct answers earn maximum speed bonus XP." },
+  { k: ["race", "grand prix", "warp", "quantum warp", "flare", "nitro"], a: "Quantum Warp GP: Wait for the random neon flare (2.2s to 4.8s) after engine charge. Tap the moment it flares—sub-160ms reaction times trigger nitro critical boosts." },
+  { k: ["memory", "matrix", "lock", "cipher", "glyph"], a: "Matrix Memory Lock: Watch the cyber cipher sequence playback on the 4 glyphs, then replicate the exact sequence before the countdown decays." },
+  { k: ["code", "lab", "speedrun", "cybercode", "debug"], a: "Code Lab Speedrun: Competitive algorithmic debugging. Read the failing test suite, fix the algorithm, and run tests to beat the clock." },
+  { k: ["squad", "syndicate", "clan", "guild"], a: "Squads: Team up in tactical syndicates with up to 8 members. Enjoy spatial voice rooms, live squad radar, and shared prestige." },
+  { k: ["tournament", "bracket", "esports"], a: "Tournaments: 8-player and 16-player single-elimination brackets with seeded pairings, prize pools, and live match progression." },
   { k: ["music", "song", "dj", "orb", "dance", "party"], a: "Open the orb (Lounge) or the DJ deck (Party Hall) and pick a song. There are 8, and the colours, lasers and floor of the whole room follow the song. Try Surprise me." },
   { k: ["drink", "coffee", "bar", "marco", "lena", "juice"], a: "Walk up to Marco (Lounge coffee bar) or Lena (Party Hall juice bar), press Talk, and pick a drink. Everything is zero-alcohol, and you hold the drink for two minutes." },
   { k: ["cinema", "movie", "video", "youtube", "watch"], a: "Party Hall, west side: sit in a cinema seat, paste a YouTube, Vimeo or direct .mp4/.webm link and press Play. Everyone seated in the cinema watches it." },
@@ -57,6 +72,42 @@ export function answerApp(q: string): string {
   });
   const b = best as { n: number; a: string } | null;
   return b ? b.a : "I can help with the worlds, music, drinks, the cinema, AI class, video meetings, chat and your profile. What would you like to do? (Add an AI key on the server and I can answer anything.)";
+}
+
+export function answerGame(gameId: string, q: string): string {
+  const g = (gameId || "").toLowerCase();
+  const text = q.toLowerCase();
+  if (g.includes("dice")) {
+    if (text.includes("multiplier") || text.includes("double") || text.includes("triple")) {
+      return "Cyber Dice Multipliers: Rolling doubles triggers a 2x quantum multiplier; rolling triples triggers a massive 5x jackpot multiplier!";
+    }
+    return "Cyber Dice Duel: Roll your quantum dice against opponents. Highest combined points with roll multipliers over all rounds takes the crown.";
+  }
+  if (g.includes("quiz")) {
+    if (text.includes("timer") || text.includes("time") || text.includes("decay") || text.includes("15")) {
+      return "Neural Quiz Arena: Each question features a 15-second decay timer. Answering correctly in under 3 seconds awards the maximum speed bonus XP!";
+    }
+    return "Neural Quiz Arena: Multi-round synchronized speed-trivia across AI, space, tech, and science domains.";
+  }
+  if (g.includes("race")) {
+    if (text.includes("flare") || text.includes("nitro") || text.includes("reaction")) {
+      return "Quantum Warp GP: Wait for the random neon flare (2.2s - 4.8s). React in sub-160ms to trigger a Nitro Critical speed boost!";
+    }
+    return "Quantum Warp Grand Prix: Reflex raceway with tachyon charge, random neon flare, and slipstream drafting.";
+  }
+  if (g.includes("memory")) {
+    if (text.includes("cipher") || text.includes("sequence") || text.includes("glyph")) {
+      return "Matrix Memory Lock: Encrypted cyber cipher sequence on 4 glyphs. Memorize the pattern sequence and replicate it before decay.";
+    }
+    return "Matrix Memory Lock: Memorize and replicate the encrypted cyber cipher glyph sequences across escalating rounds.";
+  }
+  if (g.includes("code") || g.includes("cybercode")) {
+    if (text.includes("test") || text.includes("debug") || text.includes("run")) {
+      return "Code Lab Speedrun: Fix the bug in the algorithm and press Run. All unit tests must pass before you can submit.";
+    }
+    return "Code Lab Speedrun: Competitive algorithmic debugging. Read failing test output, fix the JavaScript algorithm, and beat rivals.";
+  }
+  return answerApp(q);
 }
 
 /** How each NPC speaks. Server-side only: the browser sends an id, never the persona. */

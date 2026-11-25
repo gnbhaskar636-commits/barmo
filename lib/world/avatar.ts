@@ -285,7 +285,13 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
   // ---- static body (one merged mesh per material) ----
   const S = new Builder();
   S.add(cyl(sw, bw, tor, 18), c.top, { at: [0, torMid, 0], sc: [1, 1, zs], r: fab });
-  if (R) [-1, 1].forEach((s) => S.add(sph(sw * 0.42, 12, 8), c.top, { at: [s * sw * 0.64, neckY - 0.015, 0], sc: [1.25, 0.55, 0.95], r: fab }));
+  if (R) {
+    [-1, 1].forEach((s) => {
+      S.add(sph(sw * 0.42, 12, 8), c.top, { at: [s * sw * 0.64, neckY - 0.015, 0], sc: [1.25, 0.55, 0.95], r: fab });
+      // Metallic cybernetic shoulder pauldrons
+      S.add(box(sw * 0.38, 0.02, sw * 0.4), dark(c.trim, 0.9), { at: [s * sw * 0.82, neckY + 0.01, 0], rot: [0, 0, s * -0.18], r: 0.25, mt: 0.85 });
+    });
+  }
   S.add(cyl(bw * 1.03, bw * 1.03, 0.045, 18), dark(c.bottom, 0.9), { at: [0, hipY + 0.03, 0], sc: [1, 1, zs], r: 0.5 });
   S.add(cyl(hr * (R ? 0.4 : 0.36), hr * (R ? 0.46 : 0.42), R ? 0.1 : 0.07), c.skin, { at: [0, neckY + (R ? 0.03 : 0.015), 0], r: SK });
   const fz = (frac: number) => (bw + (sw - bw) * frac) * zs + 0.006; // torso front surface at height fraction
@@ -312,6 +318,11 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
     S.add(sph(hr * 0.2, 10, 8), c.skin, { at: [0, hy - hr * 0.8, hr * 0.46], sc: [1.1, 0.8, 0.9], r: SK }); // chin
     [-1, 1].forEach((s) => {
       S.add(sph(hr * 0.2), c.skin, { at: [s * hr * 0.88, hy - hr * 0.02, -hr * 0.04], sc: [0.5, 1.1, 0.8], r: SK }); // ears
+      // Cybernetic neural comm node on right ear
+      if (s === 1) {
+        S.add(cyl(0.012, 0.012, 0.008, 8), 0x06b6d4, { at: [s * hr * 0.94, hy - hr * 0.02, -hr * 0.02], rot: [0, 0, Math.PI / 2], basic: true });
+        S.add(sph(0.006, 6, 6), 0xffffff, { at: [s * hr * 0.96, hy - hr * 0.02, -hr * 0.02], basic: true });
+      }
       S.add(sph(hr * 0.22, 10, 8), c.skin, { at: [s * hr * 0.4, hy + hr * 0.22, hr * 0.84], sc: [1.4, 0.45, 0.7], r: SK }); // brow ridge
       S.add(sph(hr * 0.15, 10, 8), dark(c.skin, 0.94), { at: [s * hr * 0.4, hy + hr * 0.12, hr * 0.9], sc: [1.2, 0.45, 0.6], r: SK }); // upper eyelids
       S.add(sph(hr * 0.1, 8, 6), c.skin, { at: [s * hr * 0.09, hy - hr * 0.23, hr * 1.0], r: SK }); // nostril wings
@@ -392,6 +403,7 @@ export function makeAvatar(x: Partial<AvatarConfig> | string): THREE.Group {
     S.add(new THREE.TorusGeometry(hr * 0.8, 0.015, 8, 28), 0xffe08a, { at: [0, hy + hr * 1.6, 0], rot: [Math.PI / 2, 0, 0], basic: true });
   } else if (c.acc === "visor") {
     S.add(box(hr * 1.85, hr * 0.3, 0.025), 0x5ef2c8, { at: [0, hy + hr * 0.1, hr * 0.99], basic: true });
+    S.add(box(hr * 1.75, 0.008, 0.028), 0xffffff, { at: [0, hy + hr * 0.1, hr * 1.0], basic: true }); // glowing HUD line
     S.add(box(hr * 2.05, 0.015, hr * 1.9), 0x1b1f2b, { at: [0, hy + hr * 0.29, 0], r: 0.4, mt: 0.5 });
   } else if (c.acc === "antenna") {
     S.add(cyl(0.01, 0.01, hr * 1.0, 6), 0x9aa3b8, { at: [hr * 0.3, hy + hr * 1.45, 0], mt: 0.7, r: 0.3 });

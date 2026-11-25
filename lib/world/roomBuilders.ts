@@ -781,11 +781,175 @@ function disposeTree(sc: THREE.Scene, g: THREE.Object3D) {
   });
 }
 
+/* ---------- Cyber Arena ---------- */
+function buildArena(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
+  sc.background = new THREE.Color(0x0c0a14);
+  sc.fog = new THREE.Fog(0x0c0a14, 22, 54);
+  const g = new THREE.Group();
+  g.name = "room-arena";
+  sc.add(g);
+  const s = shell(g, room, 0x161320, 0x0f0c18, room.color, 0.4);
+  lights(g, 0xff7080, 1.6, 0xff9aa6, 0x18101a, 1.1, 0xff6b78, 1.4);
+
+  // Holographic battle ring / elevated platform (r = 4.2)
+  const ringBase = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.4, 0.25, 48), std(0x221a28, 0.3, 0.7));
+  ringBase.position.set(0, 0.125, 0);
+  g.add(ringBase);
+
+  // Outer glowing ring boundary
+  const ringGlow = new THREE.Mesh(new THREE.TorusGeometry(4.2, 0.06, 12, 64), glow(room.color, 0.9));
+  ringGlow.rotation.x = Math.PI / 2;
+  ringGlow.position.set(0, 0.26, 0);
+  g.add(ringGlow);
+
+  // Inner rotating holographic combat grid
+  const holoCombat = new THREE.Mesh(new THREE.RingGeometry(1.2, 4.0, 48), glow(0xff3b52, 0.2));
+  holoCombat.rotation.x = -Math.PI / 2;
+  holoCombat.position.set(0, 0.27, 0);
+  g.add(holoCombat);
+
+  // Floating energy rings above combat ring
+  const arenaFloats = [1.8, 2.8].map((y, i) => {
+    const t = new THREE.Mesh(new THREE.TorusGeometry(3.6 - i * 0.8, 0.022, 8, 64), glow(i === 0 ? room.color : 0x00f0ff, 0.75));
+    t.rotation.x = Math.PI / 2;
+    t.position.set(0, y, 0);
+    g.add(t);
+    return t;
+  });
+
+  // 3-Tier podium at x: -5, z: -4
+  const podMat = std(0x282030, 0.4, 0.5);
+  // Gold (Center, 1st place)
+  bx(g, 1.2, 0.65, 1.2, -5, 0.325, -4, podMat, col);
+  bx(g, 1.24, 0.04, 1.24, -5, 0.66, -4, glow(0xf59e0b, 0.9));
+  // Silver (Left, 2nd place)
+  bx(g, 1.1, 0.45, 1.1, -6.2, 0.225, -4, podMat, col);
+  bx(g, 1.14, 0.04, 1.14, -6.2, 0.46, -4, glow(0x94a3b8, 0.9));
+  // Bronze (Right, 3rd place)
+  bx(g, 1.1, 0.30, 1.1, -3.8, 0.15, -4, podMat, col);
+  bx(g, 1.14, 0.04, 1.14, -3.8, 0.31, -4, glow(0xd97706, 0.9));
+
+  // Spectator bleachers on East side (tiered seating)
+  const benchMat = std(0x1a1622, 0.6, 0.3);
+  [0.35, 0.75, 1.15].forEach((h, idx) => {
+    const xPos = 7.5 + idx * 1.1;
+    bx(g, 0.9, h, 8.0, xPos, h / 2, 0, benchMat, col);
+    bx(g, 0.94, 0.04, 8.04, xPos, h + 0.02, 0, glow(room.color, 0.5));
+  });
+
+  // Scoreboard on North wall
+  const boardDef = room.board || { title: "MATCH SCOREBOARD", text: "Cyber Arena Season 4.", accent: room.color };
+  const bd = makeBoard(boardDef.title, boardDef.text, boardDef.accent);
+  screen(g, bd.tex, 8.6, 3.2, 0, 3.2, s.north + 0.12, 0, room.color);
+
+  // Stadium spot lights
+  ([[-8, s.north + 2], [8, s.north + 2], [-8, s.south - 2], [8, s.south - 2]] as const).forEach(([lx, lz]) => {
+    const pl = new THREE.PointLight(room.color, 24, 16, 1.8);
+    pl.position.set(lx, 4.2, lz);
+    g.add(pl);
+  });
+
+  return {
+    update(t, _dt, _level, _bands, mood) {
+      holoCombat.rotation.z = t * 0.001;
+      arenaFloats[0].rotation.z = t * 0.0015;
+      arenaFloats[1].rotation.z = -t * 0.002;
+      arenaFloats[0].position.y = 1.8 + Math.sin(t * 0.002) * 0.12;
+      arenaFloats[1].position.y = 2.8 + Math.cos(t * 0.0025) * 0.15;
+      if (mood && mood.level > 0.4) {
+        (ringGlow.material as THREE.MeshBasicMaterial).opacity = 0.7 + mood.level * 0.3;
+      }
+    },
+    setBoard: bd.set,
+    dispose: () => disposeTree(sc, g),
+  };
+}
+
+/* ---------- Quantum Raceway ---------- */
+function buildRaceway(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
+  sc.background = new THREE.Color(0x060f16);
+  sc.fog = new THREE.Fog(0x060f16, 24, 58);
+  const g = new THREE.Group();
+  g.name = "room-raceway";
+  sc.add(g);
+  const s = shell(g, room, 0x0c1a24, 0x08131c, room.color, 0.45);
+  lights(g, 0x00f0ff, 1.7, 0x6ee7b7, 0x0a1c26, 1.2, 0x06b6d4, 1.5);
+
+  // Central Tachyon Energy Core / floating reactor at x: 0, z: -4.0
+  const coreMesh = new THREE.Mesh(new THREE.OctahedronGeometry(1.2, 2), std(0x00f0ff, 0.1, 0.9));
+  coreMesh.position.set(0, 2.4, -4.0);
+  g.add(coreMesh);
+
+  // Orbiting containment reactor rings around tachyon core
+  const reactorRings = [1.8, 2.4, 3.0].map((r, i) => {
+    const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.028, 8, 64), glow(i % 2 === 0 ? room.color : 0x10b981, 0.8));
+    t.position.set(0, 2.4, -4.0);
+    g.add(t);
+    return t;
+  });
+
+  // Tachyon reactor pedestal collider
+  bx(g, 2.4, 0.8, 2.4, 0, 0.4, -4.0, std(0x112433, 0.3, 0.6), col);
+  bx(g, 2.46, 0.05, 2.46, 0, 0.82, -4.0, glow(room.color, 0.8));
+
+  // Glowing speedway track boundaries with 3 acceleration hoops (TorusGeometry)
+  const hoops = [-6.0, 0.0, 6.0].map((z, i) => {
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(2.8, 0.07, 10, 48), glow(i === 1 ? 0x00f0ff : 0x10b981, 0.75));
+    hoop.position.set(0, 2.8, z);
+    g.add(hoop);
+    return hoop;
+  });
+
+  // 4 Starting grid launch bays at z: 4.0
+  const bayMat = std(0x162c3d, 0.5, 0.4);
+  [-4.5, -1.5, 1.5, 4.5].forEach((x) => {
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.4), glow(0x00f0ff, 0.3));
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set(x, 0.02, 4.0);
+    g.add(pad);
+    bx(g, 0.08, 0.06, 2.4, x - 0.9, 0.03, 4.0, glow(0x10b981, 0.7));
+    bx(g, 0.08, 0.06, 2.4, x + 0.9, 0.03, 4.0, glow(0x10b981, 0.7));
+  });
+
+  // Speedway track barriers (North/South dividers)
+  bx(g, 0.3, 0.7, 12.0, -8.5, 0.35, 0, bayMat, col);
+  bx(g, 0.34, 0.05, 12.04, -8.5, 0.72, 0, glow(room.color, 0.8));
+  bx(g, 0.3, 0.7, 12.0, 8.5, 0.35, 0, bayMat, col);
+  bx(g, 0.34, 0.05, 12.04, 8.5, 0.72, 0, glow(room.color, 0.8));
+
+  // Speedway telemetry board on South wall
+  const boardDef = room.board || { title: "SPEEDWAY TELEMETRY", text: "Quantum Raceway Lap Records.", accent: room.color };
+  const bd = makeBoard(boardDef.title, boardDef.text, boardDef.accent);
+  screen(g, bd.tex, 8.4, 3.0, 0, 3.0, s.south - 0.12, Math.PI, room.color);
+
+  return {
+    update(t, _dt, _level, _bands, mood) {
+      coreMesh.rotation.x = t * 0.001;
+      coreMesh.rotation.y = t * 0.0015;
+      coreMesh.position.y = 2.4 + Math.sin(t * 0.002) * 0.18;
+      reactorRings[0].rotation.x = t * 0.0018;
+      reactorRings[1].rotation.y = -t * 0.0022;
+      reactorRings[2].rotation.z = t * 0.0014;
+      hoops.forEach((h, i) => {
+        const pulse = 0.6 + 0.35 * Math.sin(t * 0.003 + i * 1.5);
+        (h.material as THREE.MeshBasicMaterial).opacity = pulse;
+      });
+      if (mood && mood.level > 0.4) {
+        coreMesh.scale.setScalar(1 + mood.level * 0.12);
+      }
+    },
+    setBoard: bd.set,
+    dispose: () => disposeTree(sc, g),
+  };
+}
+
 /** Builds the 3D set for a non-lounge world. Fills `col` with things you can't walk through. */
 export function buildRoom(sc: THREE.Scene, room: RoomDef, col: Collider[]): RoomCtl {
   if (room.id === "meeting") return buildMeeting(sc, room, col);
   if (room.id === "party") return buildParty(sc, room, col);
   if (room.id === "cosmos") return buildCosmos(sc, room, col);
+  if (room.id === "arena") return buildArena(sc, room, col);
+  if (room.id === "raceway") return buildRaceway(sc, room, col);
   return buildLab(sc, room, col);
 }
 

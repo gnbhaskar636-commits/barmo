@@ -50,30 +50,30 @@ export function createLiveKitVoice(o: LiveKitOptions) {
       const j = (await res.json().catch(() => ({}))) as { token?: string; url?: string; error?: string };
       if (!res.ok || !j.token || !j.url) throw new Error(j.error || "Could not start voice");
 
-      const lk = await import("livekit-client");
+      const lk = (await import("livekit-client")) as any;
       const r = new lk.Room({
         adaptiveStream: true,
         dynacast: true,
         audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
-      r.on(lk.RoomEvent.TrackSubscribed, (track, _pub, p) => {
-        if (track.kind !== lk.Track.Kind.Audio || o.isBlocked(p.identity.split("~")[0])) return;
+      r.on(lk.RoomEvent.TrackSubscribed, (track: any, _pub: any, p: any) => {
+        if (track.kind !== (lk.Track?.Kind?.Audio ?? "audio") || o.isBlocked(p.identity.split("~")[0])) return;
         const el = track.attach();
         el.style.display = "none";
         el.muted = o.isMuted(p.identity.split("~")[0]);
         document.body.appendChild(el);
         audios.add(el);
       });
-      r.on(lk.RoomEvent.TrackUnsubscribed, (track) => {
-        track.detach().forEach((el) => {
+      r.on(lk.RoomEvent.TrackUnsubscribed, (track: any) => {
+        track.detach().forEach((el: HTMLElement) => {
           audios.delete(el);
           el.remove();
         });
       });
       r.on(lk.RoomEvent.ParticipantConnected, emit);
       r.on(lk.RoomEvent.ParticipantDisconnected, emit);
-      r.on(lk.RoomEvent.ActiveSpeakersChanged, (list) => {
-        const now = new Set(list.map((p) => p.identity));
+      r.on(lk.RoomEvent.ActiveSpeakersChanged, (list: any[]) => {
+        const now = new Set<string>(list.map((p: any) => String(p.identity)));
         speaking.forEach((id) => {
           if (!now.has(id)) o.onSpeaking(id === o.myId ? null : id, false);
         });

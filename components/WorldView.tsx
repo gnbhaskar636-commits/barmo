@@ -55,6 +55,8 @@ const NOVA_CHIPS: Record<string, string[]> = {
   party: ["How do we watch a video together?", "How do I change the music?"],
   lab: ["Explain neural networks simply", "How does the AI class work?"],
   cosmos: ["What is there to do in Cosmos?", "Suggest a calm thing to do"],
+  arena: ["How do tournament battles work?", "What are the rules of Cyber Arena?"],
+  raceway: ["How do I trigger tachyon acceleration?", "What is slipstream drafting?"],
 };
 
 type Api = {
@@ -100,7 +102,7 @@ const DOCK: { k: Exclude<Panel, null | "orb" | "nova">; icon: string; label: str
   { k: "menu", icon: "☰", label: "Menu" },
 ];
 
-export default function WorldView() {
+export default function WorldView({ initialRoom }: { initialRoom?: RoomId } = {}) {
   const router = useRouter();
   const sp = useSearchParams();
   const hub = useHub();
@@ -123,7 +125,10 @@ export default function WorldView() {
   hubRef.current = hub;
   const name = (sp.get("name") || hub.me?.name || "Guest").trim().slice(0, 20) || "Guest";
   const avId = AVS.some((a) => a.id === sp.get("av")) ? (sp.get("av") as string) : hub.me?.av || "atlas";
-  const [room, setRoom] = useState<RoomId>(() => (isRoomId(sp.get("room")) ? (sp.get("room") as RoomId) : "lounge"));
+  const [room, setRoom] = useState<RoomId>(() => {
+    if (initialRoom && isRoomId(initialRoom)) return initialRoom;
+    return isRoomId(sp.get("room")) ? (sp.get("room") as RoomId) : "lounge";
+  });
   const fromRoom = useRef<RoomId | undefined>(undefined);
   const def = getRoom(room);
   const [entering, setEntering] = useState<RoomId | null>(null);

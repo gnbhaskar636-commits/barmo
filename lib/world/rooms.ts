@@ -1,7 +1,7 @@
 import { ZONES, type Zone } from "@/lib/world/zones";
 
 /** The separate worlds people can walk between. Pure data (no three.js) so the UI can import it cheaply. */
-export type RoomId = "lounge" | "meeting" | "party" | "lab" | "cosmos";
+export type RoomId = "lounge" | "meeting" | "party" | "lab" | "cosmos" | "arena" | "raceway";
 
 export interface Seat { id: string; x: number; z: number; yaw: number }
 /** A glowing ring on the floor. Walk into it to travel. `face` = which way the ring turns (radians). */
@@ -54,14 +54,18 @@ export const ROOMS: RoomDef[] = [
       meeting: { x: -8.2, z: -2.5, yaw: PI / 2 },
       party: { x: -8.2, z: 1.2, yaw: PI / 2 },
       lab: { x: -8.2, z: 4.9, yaw: PI / 2 },
-      cosmos: { x: 8.2, z: 4.4, yaw: -PI / 2 },
+      arena: { x: 8.2, z: -2.5, yaw: -PI / 2 },
+      raceway: { x: 8.2, z: 1.2, yaw: -PI / 2 },
+      cosmos: { x: 8.2, z: 4.9, yaw: -PI / 2 },
     },
     zones: ZONES,
     portals: [
       { to: "meeting", x: -10.6, z: -2.5, face: PI / 2 },
       { to: "party", x: -10.6, z: 1.2, face: PI / 2 },
       { to: "lab", x: -10.6, z: 4.9, face: PI / 2 },
-      { to: "cosmos", x: 10.6, z: 4.4, face: -PI / 2 },
+      { to: "arena", x: 10.6, z: -2.5, face: -PI / 2 },
+      { to: "raceway", x: 10.6, z: 1.2, face: -PI / 2 },
+      { to: "cosmos", x: 10.6, z: 4.9, face: -PI / 2 },
     ],
     seats: [],
     huddles: [{ id: "pod", name: "Meeting pod", x: 8.8, z: -5.4, r: 1.5 }],
@@ -166,10 +170,58 @@ export const ROOMS: RoomDef[] = [
       { id: "b", name: "Moon talk", x: 6, z: -3.6, r: 1.9 },
     ],
   },
+  {
+    id: "arena",
+    name: "Cyber Arena",
+    icon: "⚔️",
+    tag: "Esports battleground & combat",
+    blurb: "Esports tournament colosseum with elevated holographic battle ring, 3-tier podium, spectator bleachers, live jumbo scoreboard and squad tactical corners.",
+    color: 0xff4655,
+    hw: 11.2, z0: -9.5, z1: 9.5,
+    orb: { x: 0, z: -3.0 },
+    orbName: "Arena Core",
+    spawn: { x: 0, z: 6.5, yaw: PI },
+    zones: [
+      { id: "stage", name: "Combat Stage", icon: "⚔️", x: 0, z: 0, sx: 0, sz: 2.5 },
+      { id: "podium", name: "Champion Podium", icon: "🏆", x: 0, z: -6.0, sx: 0, sz: -4.5 },
+      { id: "orb", name: "Arena Core", icon: "⚡", x: 0, z: -3.0, sx: 0, sz: -1.5 },
+    ],
+    portals: [{ to: "lounge", x: 0, z: 8.8, face: 0 }],
+    seats: [-4.0, -2.0, 2.0, 4.0].map((x, i): Seat => ({ id: "s" + i, x, z: 4.5, yaw: PI })),
+    huddles: [
+      { id: "red", name: "Red Corner", x: -6, z: 3, r: 2.2 },
+      { id: "blue", name: "Blue Corner", x: 6, z: 3, r: 2.2 },
+    ],
+    board: { title: "MATCH SCOREBOARD", text: "Cyber Arena Season 4. Prepare for battle.", accent: 0xff4655 },
+  },
+  {
+    id: "raceway",
+    name: "Quantum Raceway",
+    icon: "🏎️",
+    tag: "High-octane reflex speedway",
+    blurb: "Anti-gravity velocity raceway. Central tachyon reactor core, pulsating acceleration hoops, neon track barriers and 4 starting grid launch bays.",
+    color: 0x06b6d4,
+    hw: 12.0, z0: -10.0, z1: 10.0,
+    orb: { x: 0, z: -4.0 },
+    orbName: "Tachyon Core",
+    spawn: { x: 0, z: 7.5, yaw: PI },
+    zones: [
+      { id: "grid", name: "Starting Grid", icon: "🚦", x: 0, z: 4.0, sx: 0, sz: 5.5 },
+      { id: "finish", name: "Tachyon Finish Line", icon: "🏁", x: 0, z: -7.0, sx: 0, sz: -5.5 },
+      { id: "orb", name: "Tachyon Core", icon: "⚛️", x: 0, z: -4.0, sx: 0, sz: -2.0 },
+    ],
+    portals: [{ to: "lounge", x: 0, z: 9.2, face: 0 }],
+    seats: [-5.0, -2.5, 2.5, 5.0].map((x, i): Seat => ({ id: "p" + i, x, z: 5.0, yaw: PI })),
+    huddles: [
+      { id: "pit", name: "Tachyon Pit Stop", x: -7, z: 2, r: 2.4 },
+    ],
+    board: { title: "SPEEDWAY TELEMETRY", text: "Quantum Raceway Lap Records. Push your reflexes to the limit.", accent: 0x06b6d4 },
+  },
 ];
 
 export const getRoom = (id: string | null | undefined): RoomDef => ROOMS.find((r) => r.id === id) || ROOMS[0];
 export const isRoomId = (v: unknown): v is RoomId => ROOMS.some((r) => r.id === v);
+export const isInsideHuddle = (px: number, pz: number, h: Huddle): boolean => Math.hypot(px - h.x, pz - h.z) <= h.r;
 /** Where to appear in `to` when arriving from `from`. */
 export const spawnFor = (to: RoomId, from?: RoomId): Spawn => {
   const r = getRoom(to);

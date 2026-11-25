@@ -15,14 +15,17 @@ export const ITEMS: Item[] = [
   { id: "aura_stream", name: "Token Stream", kind: "aura", price: 120, rarity: "rare", blurb: "Tokens rise off you in a steady stream.", c1: "#0b2016", c2: "#7cf6a8" },
   { id: "aura_latent", name: "Latent Space", kind: "aura", price: 220, rarity: "epic", blurb: "Orbits through a space only you understand.", c1: "#1d0b2e", c2: "#c45cff" },
 ];
-export const ITEM = Object.fromEntries(ITEMS.map((i) => [i.id, i])) as Record<string, Item>;
+export const ITEM = Object.assign(
+  Object.create(null),
+  Object.fromEntries(ITEMS.map((i) => [i.id, i]))
+) as Record<string, Item>;
 /** Shape-check a loadout from anywhere (storage, other players): only known items of the right kind survive. */
 export function cleanGear(e: unknown): Loadout {
   const o = (e && typeof e === "object" ? e : {}) as Record<string, unknown>;
   const out: Loadout = {};
   (["hoverboard", "pet", "aura"] as Kind[]).forEach((k) => {
     const id = o[k];
-    if (typeof id === "string" && ITEM[id]?.kind === k) out[k] = id;
+    if (typeof id === "string" && Object.hasOwn(ITEM, id) && ITEM[id]?.kind === k) out[k] = id;
   });
   return out;
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { APP_KNOWLEDGE, NPC_PERSONA, answerApp, npcLocal } from "@/lib/world/novaKnowledge";
 import { parseQuizJson } from "@/lib/world/quiz";
+import { novaOfflineFallback } from "@/lib/world/novaCompanion";
 
 /**
  * Nova: the in-world AI helper. Uses your own key (server-side only, never sent to the browser):
@@ -9,12 +10,13 @@ import { parseQuizJson } from "@/lib/world/quiz";
  * With no key it still answers from built-in notes, so the feature never breaks.
  *
  * Tasks: icebreaker, summary, improve, ask (one-shot) and chat (Nova assistant with memory),
- * npc (an NPC answers in character), translate (a chat message into the reader's language).
+ * npc (an NPC answers in character), translate (a chat message into the reader's language),
+ * game_rules, game_coach, match_summary.
  */
 export const runtime = "nodejs";
 
-type Task = "icebreaker" | "summary" | "improve" | "ask" | "chat" | "npc" | "translate" | "code" | "reply" | "trivia";
-const TASKS: Task[] = ["icebreaker", "summary", "improve", "ask", "chat", "npc", "translate", "code", "reply", "trivia"];
+type Task = "icebreaker" | "summary" | "improve" | "ask" | "chat" | "npc" | "translate" | "code" | "reply" | "trivia" | "game_rules" | "game_coach" | "match_summary";
+const TASKS: Task[] = ["icebreaker", "summary", "improve", "ask", "chat", "npc", "translate", "code", "reply", "trivia", "game_rules", "game_coach", "match_summary"];
 
 const SYSTEM =
   "You are Nova, a friendly AI helper inside BARMO, a 3D social space for builders and creators. " +
@@ -26,6 +28,9 @@ const PROMPTS: Record<Exclude<Task, "chat" | "npc" | "translate" | "code" | "rep
   summary: "Summarize this chat as short meeting notes: 3 key points, then up to 3 action items with owners if names are clear.",
   improve: "Give feedback on this idea: one thing that is strong, two sharp questions to test it, and a tiny first version they could build this week.",
   ask: "Answer the question helpfully and briefly.",
+  game_rules: "Explain the rules, scoring formulas, and mechanics for the specified game clearly and concisely.",
+  game_coach: "Provide tactical coaching advice and pro tips for the specified game and situation.",
+  match_summary: "Summarize the match telemetry into key highlights, performance rating, and tactical feedback.",
 };
 
 const hits = new Map<string, number[]>();
@@ -70,6 +75,9 @@ function local(task: Task, text: string, lines: string[], npc: string): string {
   }
   if (task === "improve") {
     return `Questions to test "${text.slice(0, 80)}": Who exactly needs this most? What is the smallest version you could finish this week? How will you know it worked?\n(Add an AI key on the server for deeper feedback.)`;
+  }
+  if (task === "game_rules" || task === "game_coach" || task === "match_summary") {
+    return novaOfflineFallback(task, text, { gameId: text });
   }
   return answerApp(text);
 }

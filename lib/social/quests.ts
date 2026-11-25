@@ -39,8 +39,6 @@ export const QUESTS: Quest[] = [
   { id: "group", title: "Create or join a group", hint: "Groups → make one or paste a code.", xp: 25, group: "Social" },
 ];
 
-export const levelOf = (xp: number) => Math.floor(xp / 100) + 1;
-export const levelTitle = (lvl: number) =>
-  ["Newcomer", "Regular", "Explorer", "Connector", "Host", "Legend"][Math.min(5, lvl - 1)] || "Legend";
+export { levelOf, levelTitle } from "@/lib/progression/leveling";
 
 export const EMPTY_QUESTS = { done: {}, xp: 0, visited: [], streak: 0, last: "" };

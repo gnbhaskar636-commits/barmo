@@ -33,6 +33,8 @@ export const SCENES: Record<string, MusicScene> = {
   lofi: { id: "lofi", vibe: "Cosy rainy night", palette: [0xffb86b, 0xff8a5c, 0xc8a26b], accent: 0xffb86b, theme: "sunset", floor: "pulse", lasers: 0, ball: 0.4, punch: 0.3 },
   techno: { id: "techno", vibe: "Underground techno", palette: [0x39ff7a, 0x3ec8ff, 0xffffff, 0xc45cff], accent: 0x39ff7a, theme: "neon", floor: "checker", lasers: 6, ball: 1.8, punch: 1 },
   fiesta: { id: "fiesta", vibe: "Summer fiesta", palette: [0xffd34d, 0xff5ac8, 0x5ef2c8, 0xff8a3d], accent: 0xff5ac8, theme: "sunset", floor: "rainbow", lasers: 2, ball: 1.4, punch: 0.75 },
+  cyberpunk: { id: "cyberpunk", vibe: "High-voltage dystopia", palette: [0x00f0ff, 0xff003c, 0xfcee09, 0x7122fa], accent: 0x00f0ff, theme: "neon", floor: "checker", lasers: 6, ball: 2.2, punch: 0.95 },
+  cosmic: { id: "cosmic", vibe: "Deep planetary void", palette: [0xa66bff, 0x3ec8ff, 0x2de2ff, 0x5ef2c8], accent: 0xa66bff, theme: "aurora", floor: "pulse", lasers: 3, ball: 0.6, punch: 0.4 },
 };
 
 export const sceneFor = (trackId: string | null | undefined): MusicScene | null => (trackId ? SCENES[trackId] || null : null);

@@ -13,11 +13,16 @@ import AccountCard from "@/components/account/AccountCard";
 import { ACHIEVEMENTS, loadAchievements } from "@/lib/world/achievements";
 import { COMM_STYLES, OPEN_TO, STATUSES } from "@/lib/social/store";
 import { levelOf, levelTitle } from "@/lib/social/quests";
+import { useWallet } from "@/lib/economy/economy";
+import { ITEM, KIND_LABEL, type Kind } from "@/lib/economy/catalog";
+import { useProgression } from "@/lib/progression";
 
 function Mine() {
   const router = useRouter();
   const toast = useToast();
   const h = useHub();
+  const wal = useWallet();
+  const { stats, levelProgress } = useProgression();
   const me = h.me!;
   const [ach, setAch] = useState<string[]>([]);
   useEffect(() => setAch(loadAchievements()), []);
@@ -54,7 +59,219 @@ function Mine() {
 
   return (
     <>
-      <div className="pagehead"><h1>My profile</h1><button className="btn" onClick={() => router.push(enterLoungeUrl(me.name, me.av))}>Enter the lounge</button></div>
+      <div className="pagehead">
+        <span className="u3-pill-badge" style={{ marginBottom: 8, display: "inline-flex" }}>CYBER IDENTITY 4.0</span>
+        <h1>Spatial Persona & Identity</h1>
+        <p className="hint" style={{ color: "var(--u3-text-dim)" }}>Configure your holographic 3D avatar, combat archetype loadout, presence headline, and gaming statistics.</p>
+        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button className="btn" onClick={() => router.push(enterLoungeUrl(me.name, me.av))} style={{
+            background: "linear-gradient(135deg, var(--u3-accent), var(--u3-cyan))",
+            boxShadow: "0 0 20px rgba(139,92,246,0.35)",
+            fontWeight: 600
+          }}>Enter Universe Lounge</button>
+          <button className="btn g" onClick={copyLink} style={{ borderColor: "var(--b4-border)" }}>Share Gamer ID 🔗</button>
+        </div>
+      </div>
+
+      {/* ELITE GAMER ID CARD */}
+      <div style={{
+        background: "radial-gradient(ellipse at 80% 30%, rgba(139,92,246,0.22) 0%, rgba(11,16,26,0.95) 75%), #06090e",
+        border: "1px solid var(--b4-border-glow)",
+        borderRadius: 20,
+        padding: "24px 28px",
+        marginBottom: 24,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 20,
+        boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <div style={{
+            width: 72,
+            height: 72,
+            borderRadius: 18,
+            background: "linear-gradient(135deg, var(--b4-cyan), var(--b4-accent))",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 32,
+            fontWeight: 900,
+            color: "#fff",
+            boxShadow: "0 0 20px rgba(6,182,212,0.4)",
+            flexShrink: 0,
+          }}>
+            {name ? name.charAt(0).toUpperCase() : "V"}
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, background: "rgba(139,92,246,0.25)", color: "var(--b4-accent)", padding: "2px 8px", borderRadius: 4, letterSpacing: 1 }}>
+                [APEX] SYNDICATE
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "var(--b4-gold)" }}>
+                {levelProgress.rankTier.badge} {levelProgress.rankTier.name.toUpperCase()} · RANK #1
+              </span>
+            </div>
+            <h2 style={{ fontSize: 26, fontWeight: 900, color: "#fff", margin: 0 }}>{name || "Commander Vega"}</h2>
+            <span style={{ fontSize: 13, color: "var(--b4-text-muted)" }}>Level {levelProgress.level} · {levelProgress.title} · Season 4 Combatant</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ background: "rgba(0,0,0,0.4)", border: "1px solid var(--b4-border)", padding: "8px 16px", borderRadius: 10, textAlign: "center" }}>
+            <span style={{ fontSize: 10, color: "var(--b4-text-dim)", fontWeight: 800, letterSpacing: 1, display: "block" }}>VICTORIES</span>
+            <span style={{ fontSize: 18, fontWeight: 900, color: "var(--b4-green)" }}>{stats.totalWins} WINS</span>
+          </div>
+          <div style={{ background: "rgba(0,0,0,0.4)", border: "1px solid var(--b4-border)", padding: "8px 16px", borderRadius: 10, textAlign: "center" }}>
+            <span style={{ fontSize: 10, color: "var(--b4-text-dim)", fontWeight: 800, letterSpacing: 1, display: "block" }}>PRECISION</span>
+            <span style={{ fontSize: 18, fontWeight: 900, color: "var(--b4-cyan)" }}>{stats.precisionRate}%</span>
+          </div>
+          <div style={{ background: "rgba(0,0,0,0.4)", border: "1px solid var(--b4-border)", padding: "8px 16px", borderRadius: 10, textAlign: "center" }}>
+            <span style={{ fontSize: 10, color: "var(--b4-text-dim)", fontWeight: 800, letterSpacing: 1, display: "block" }}>TOKENS</span>
+            <span style={{ fontSize: 18, fontWeight: 900, color: "var(--b4-gold)" }}>{wal.tokens.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3-SLOT COMBAT LOADOUT RIBBON */}
+      <div style={{
+        background: "var(--b4-bg-surface)",
+        border: "1px solid var(--b4-border)",
+        borderRadius: 16,
+        padding: "18px 24px",
+        marginBottom: 24,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 16 }}>🛡️</span>
+            <div>
+              <b style={{ fontSize: 14, color: "#fff", display: "block" }}>3-Slot Combat Loadout Ribbon</b>
+              <span style={{ fontSize: 12, color: "var(--b4-text-dim)" }}>Equipped 3D holographic cosmetics synchronized to the Spatial Lounge</span>
+            </div>
+          </div>
+          <button
+            className="btn g sm"
+            onClick={() => router.push("/shop")}
+            style={{ fontSize: 11, fontWeight: 700, borderColor: "var(--b4-border-glow)", color: "var(--b4-cyan)" }}
+          >
+            CUSTOMIZE IN CYBER ARMORY →
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+          {(["hoverboard", "pet", "aura"] as Kind[]).map((kind) => {
+            const equippedId = wal.equipped[kind];
+            const item = equippedId ? ITEM[equippedId] : null;
+            return (
+              <div
+                key={kind}
+                style={{
+                  background: item ? `linear-gradient(135deg, ${item.c1}88, rgba(0,0,0,0.6))` : "rgba(255,255,255,0.02)",
+                  border: item ? `1px solid ${item.c2}66` : "1px dashed var(--b4-border)",
+                  borderRadius: 12,
+                  padding: "14px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <div style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 10,
+                  background: item ? item.c2 : "rgba(255,255,255,0.05)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 20,
+                  color: "#000",
+                  fontWeight: 900,
+                  boxShadow: item ? `0 0 12px ${item.c2}88` : "none",
+                  flexShrink: 0,
+                }}>
+                  {kind === "hoverboard" ? "🛹" : kind === "pet" ? "🐾" : "✨"}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--b4-text-dim)", display: "block" }}>
+                    {KIND_LABEL[kind]}
+                  </span>
+                  <b style={{ fontSize: 13, color: item ? "#fff" : "var(--b4-text-muted)", display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                    {item ? item.name : "None Equipped"}
+                  </b>
+                  {item && (
+                    <span style={{ fontSize: 10, color: item.rarity === "epic" ? "#c45cff" : item.rarity === "rare" ? "#5ef2e0" : "#a6f4c5", fontWeight: 700, textTransform: "uppercase" }}>
+                      {item.rarity}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* RECENT MATCH HISTORY */}
+      <div style={{
+        background: "var(--b4-bg-surface)",
+        border: "1px solid var(--b4-border)",
+        borderRadius: 16,
+        padding: "18px 24px",
+        marginBottom: 24,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <b style={{ fontSize: 14, color: "#fff" }}>⚔️ Recent Arena Match History</b>
+          <span style={{ fontSize: 11, color: "var(--b4-text-dim)" }}>
+            {stats.matchHistory.length} matches logged
+          </span>
+        </div>
+
+        {stats.matchHistory.length === 0 ? (
+          <div style={{ padding: "20px 0", textAlign: "center", color: "var(--b4-text-muted)", fontSize: 13 }}>
+            No arena matches recorded yet. Jump into Games to earn XP and tokens!
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {stats.matchHistory.slice(0, 6).map((m) => (
+              <div
+                key={m.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  background: "rgba(0,0,0,0.3)",
+                  border: "1px solid var(--b4-border)",
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  fontSize: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    fontWeight: 800,
+                    fontSize: 10,
+                    background: m.won ? "rgba(16,185,129,0.2)" : "rgba(244,63,94,0.15)",
+                    color: m.won ? "var(--b4-green)" : "var(--b4-rose)",
+                  }}>
+                    {m.won ? "VICTORY" : "RANK #" + m.placement}
+                  </span>
+                  <b style={{ color: "#fff", textTransform: "capitalize" }}>
+                    {m.gameId === "dice" ? "Cyber Dice Duel" : m.gameId === "quiz" ? "Neural Quiz Arena" : m.gameId === "race" ? "Quantum Warp GP" : m.gameId === "memory" ? "Matrix Memory Lock" : "Code Lab Speedrun"}
+                  </b>
+                  <span style={{ color: "var(--b4-text-dim)" }}>Score: {m.score}</span>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ color: "var(--b4-cyan)", fontWeight: 700 }}>+{m.xpEarned} XP</span>
+                  <span style={{ color: "var(--b4-gold)", fontWeight: 700 }}>+{m.tokensEarned} TOKENS</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="two prof2">
         <div className="card">
           <div className="phead"><Dot av={av} name={name} size={64} top={top} /><div><h2>{name || "Guest"}</h2><small className="hint">Level {lvl} · {levelTitle(lvl)} · {h.friends.length} friends</small></div></div>

@@ -3,7 +3,7 @@ import { buildLounge, type Collider } from "@/lib/world/lounge";
 import { getRoom, type RoomId, type Seat, type Spawn } from "@/lib/world/rooms";
 import { addHuddles, addPortals, buildRoom } from "@/lib/world/roomBuilders";
 import { makeAvatar, type AvatarConfig } from "@/lib/world/avatar";
-import { addFx, addRing } from "@/lib/world/fx";
+import { addFx, addRing, createDashTrail, createFootstepSparks, createActionShockwave, updateActionShockwaves, clearActionShockwaves } from "@/lib/world/fx";
 import { THEMES, addOrb, makeThemeCtl, type BurstKind } from "@/lib/world/orb";
 import { currentTrack, musicBands, musicBeat, musicLevel, playing } from "@/lib/world/music";
 import { sceneFor, type Mood } from "@/lib/world/scenes";
@@ -12,7 +12,8 @@ import { makeRealism, shade } from "@/lib/world/realism";
 import { addNpcs } from "@/lib/world/npcs";
 import { disposeCup, drinkById, makeCup } from "@/lib/world/drinks";
 import { addVideoWall, makeVideoOverlay, videoSpec } from "@/lib/world/videoWall";
-import { gyroDelta, PITCH_DEFAULT, PITCH_MAX, PITCH_MIN, ZOOM_MAX, ZOOM_MIN, clamp, loadControls, moveVector, nextCamMode, orbitOffset, type CamControls, type CamMode } from "@/lib/world/controls";
+import { gyroDelta, PITCH_DEFAULT, PITCH_MAX, PITCH_MIN, ZOOM_MAX, ZOOM_MIN, clamp, loadControls, moveVector, nextCamMode, orbitOffset, applyCameraTrauma, updateCameraDynamics, checkRoomBoundaryCollision, type CamControls, type CamMode, type RoomBounds } from "@/lib/world/controls";
+import { loadCharacterModel, type CharacterInstance, type AnimationState } from "@/lib/world/characterLoader";
 import type { VideoSrc } from "@/lib/world/screens";
 import { addConnect, type LinkNode } from "@/lib/world/connect";
 import { addTerrace, onTerrace } from "@/lib/world/terrace";
@@ -52,6 +53,8 @@ export interface WorldOptions {
   /** One line under my name tag (profile headline). */
   mySub?: string;
   myCfg: AvatarConfig;
+  /** Optional custom 3D rigged humanoid glTF/GLB model URL (defaults to /models/avatar.gltf). */
+  myModelUrl?: string;
   /** Presence adapter — provided when the user is authenticated. */
   into?: {
     /** Throttled by the adapter; called whenever I move. */
@@ -165,8 +168,14 @@ export function pose(g: THREE.Group, moving: boolean, t: number, groove = 0) {
   const sw = moving ? Math.sin(t * 0.009) * 0.7 : 0;
   legs[0].rotation.x = sw;
   legs[1].rotation.x = -sw;
-  arms[0].rotation.set(-sw * 0.8, 0, 0);
-  arms[1].rotation.set(sw * 0.8, 0, 0);
+  if (moving) {
+    arms[0].rotation.set(-sw * 0.8, 0, 0);
+    arms[1].rotation.set(sw * 0.8, 0, 0);
+  } else {
+    const breath = Math.sin(t * 0.002) * 0.02;
+    arms[0].rotation.set(0, 0, 0.05 + breath);
+    arms[1].rotation.set(0, 0, -(0.05 + breath));
+  }
   let bob = moving ? Math.abs(Math.sin(t * 0.009)) * 0.04 : Math.sin(t * 0.002) * 0.012;
   g.rotation.z = 0;
   // Music on and standing still: a little head-bob and sway on the beat (groove 0..1)
@@ -267,10 +276,15 @@ class Peer {
   pet: THREE.Group | null = null;
   petId = "";
   scene: THREE.Scene | null = null;
+  char: CharacterInstance | null = null;
+  avatarInner: THREE.Group;
 
-  constructor(cfg: AvatarConfig, s: RemotePeerState, host: HTMLElement) {
+  constructor(cfg: AvatarConfig, s: RemotePeerState, host: HTMLElement, modelUrl?: string) {
     this.cfg = cfg;
-    this.group = makeAvatar(cfg);
+    this.group = new THREE.Group();
+    this.avatarInner = makeAvatar(cfg);
+    this.group.add(this.avatarInner);
+    this.group.userData = this.avatarInner.userData;
     shade(this.group);
     addRing(this.group, 0x7fb59a);
     this.group.position.set(s.x, 0, s.z);
@@ -285,6 +299,21 @@ class Peer {
     this.bubEl = document.createElement("div");
     this.bubEl.className = "bub";
     host.appendChild(this.bubEl);
+
+    loadCharacterModel(modelUrl || "/models/avatar.gltf", undefined, cfg).then((char) => {
+      this.char = char;
+      if (!char.isProceduralFallback) {
+        this.group.remove(this.avatarInner);
+        this.avatarInner.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (mesh.material) (mesh.material as THREE.Material).dispose();
+        });
+        this.avatarInner = char.root;
+        this.group.add(this.avatarInner);
+        shade(this.avatarInner);
+      }
+    });
   }
 
   setName(name: string, sub?: string) {
@@ -316,6 +345,7 @@ class Peer {
   }
 
   dispose(host: HTMLElement) {
+    this.char?.dispose();
     this.aura?.dispose();
     if (this.pet) {
       this.scene?.remove(this.pet);
@@ -471,11 +501,36 @@ export function runWorld(
     }
   }
   const vover = makeVideoOverlay(host, camera, vspec);
-  const me = makeAvatar(opts.myCfg);
+  const me = new THREE.Group();
+  let meAvatarInner = makeAvatar(opts.myCfg);
+  me.add(meAvatarInner);
+  me.userData = meAvatarInner.userData;
   shade(me);
   addRing(me, 0xc8a26b);
   me.position.set(spawn.x, 0, spawn.z);
   scene.add(me);
+
+  let meChar: CharacterInstance | null = null;
+  loadCharacterModel(opts.myModelUrl || "/models/avatar.gltf", undefined, opts.myCfg).then((char) => {
+    meChar = char;
+    if (!char.isProceduralFallback) {
+      me.remove(meAvatarInner);
+      meAvatarInner.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+        if (m.material) (m.material as THREE.Material).dispose();
+      });
+      meAvatarInner = char.root;
+      me.add(meAvatarInner);
+      shade(meAvatarInner);
+    }
+  });
+
+  const dashTrail = createDashTrail(scene);
+  const footstepSparks = createFootstepSparks(scene);
+  const roomBounds: RoomBounds = isLounge
+    ? { minX: -11.8, maxX: 11.8, minZ: -8.8, maxZ: 8.8, margin: 0.5 }
+    : { minX: -room.hw, maxX: room.hw, minZ: room.z0, maxZ: room.z1, margin: 0.5 };
   const myLo: Loadout = opts.full ? load<Loadout>("loadout", {}) : {};
   const aura = myLo.aura ? addAura(me, myLo.aura) : null;
   const myPet = myLo.pet ? makeCompanion(myLo.pet) : null; // follows me in the lounge (the rooftop has its own roaming pet)
@@ -643,6 +698,20 @@ export function runWorld(
     }
     if (e.type === "keydown" && !e.ctrlKey && !e.metaKey && (k === "+" || k === "=")) zoom = clamp(zoom * 0.88, ZOOM_MIN, ZOOM_MAX);
     if (e.type === "keydown" && !e.ctrlKey && !e.metaKey && (k === "-" || k === "_")) zoom = clamp(zoom * 1.14, ZOOM_MIN, ZOOM_MAX);
+    if (k === "shift" || k === "shiftleft" || k === "shiftright") {
+      if (e.type === "keydown") keys.shift = true;
+      else if (e.type === "keyup") keys.shift = false;
+    }
+    if (k === " " || k === "space") {
+      if (e.type === "keydown" && !e.repeat) {
+        keys.space = true;
+        createActionShockwave(scene, me.position);
+        applyCameraTrauma(0.18);
+      } else if (e.type === "keyup") {
+        keys.space = false;
+      }
+      e.preventDefault();
+    }
     if ((MOVEMENT_KEYS as readonly string[]).includes(k)) {
       // Shift + arrow keys turn the camera instead of walking
       if (e.type === "keydown" && e.shiftKey && k.startsWith("arrow")) ckeys[k] = true;
@@ -820,6 +889,7 @@ export function runWorld(
     const raw = t - last;
     const dt = Math.min(raw / 1000, 0.05);
     last = t;
+    let isSprinting = false;
     // If the device keeps struggling (under ~26 fps for 8 seconds) switch to Low graphics by itself.
     if (opts.full && raw < 250) {
       fpsT += raw;
@@ -901,8 +971,10 @@ export function runWorld(
           meMoving = mv.amt > 0;
           if (mv.amt > 0) yaw += wrap(Math.atan2(mv.x, mv.z) - yaw) * Math.min(1, 12 * dt);
         }
+        const isSprinting = (!!keys.shift || !!keys.shiftleft || !!keys.shiftright) && (manual || goalWalk);
+        const moveSpeed = isSprinting ? 6.2 : 3.4;
         if (mx !== 0 || mz !== 0) {
-          const step = 4 * (terrace.riding() ? 1.5 : 1) * dt;
+          const step = moveSpeed * (terrace.riding() ? 1.5 : 1) * dt;
           const ox = me.position.x,
             oz = me.position.z;
           const nx = ox + mx * step,
@@ -922,6 +994,28 @@ export function runWorld(
         }
       }
       me.rotation.y += wrap(yaw - me.rotation.y) * Math.min(1, 10 * dt);
+
+      // Character instance locomotion state & particle FX
+      isSprinting = (!!keys.shift || !!keys.shiftleft || !!keys.shiftright) && meMoving;
+      if (meChar) {
+        meChar.update(dt);
+        let animState: AnimationState = "idle";
+        if (seat) {
+          animState = "idle";
+        } else if (keys[" "] || keys.space) {
+          animState = "jump";
+        } else if (me.userData.emote) {
+          animState = "action";
+        } else if (meMoving && isSprinting) {
+          animState = "run";
+        } else if (meMoving) {
+          animState = "walk";
+        }
+        meChar.setAction(animState);
+      }
+      dashTrail.update(dt, me.position, meMoving && isSprinting);
+      footstepSparks.update(dt, me.position, meMoving);
+      updateActionShockwaves();
 
       // Share my movement at ~10 Hz — transient, broadcast only, never stored.
       if (t - lastSend > 100 && opts.into) {
@@ -950,6 +1044,13 @@ export function runWorld(
         const top = camMode === "top";
         const off = orbitOffset(camYaw + sw * 0.9, (top ? 1.2 : camPitch) + sw * 0.5, (top ? 8.5 : camDist) * zoom + sw * 5);
         camera.position.lerp(v.set(tgtV.x + off.x, Math.max(0.5, tgtV.y + off.y), tgtV.z + off.z), Math.min(1, (ip < 1 ? 2.6 : 9) * dt));
+
+        // Collision zoom guard: clamp camera to stay inside room boundaries
+        if (!top) {
+          const safePos = checkRoomBoundaryCollision(camera.position, tgtV, roomBounds);
+          camera.position.copy(safePos);
+        }
+
         camera.lookAt(tgtV);
       }
       vover.update();
@@ -975,9 +1076,9 @@ export function runWorld(
     const groove = musicScene && !reduce ? 0.4 + beatI.beat * 0.6 : 0;
     if (bloom) bloom.strength = 0.55 + kick * 0.5 + lvl * 0.15;
     const wantFov = (seat ? 52 : 55) - kick * 2.4;
-    if (Math.abs(camera.fov - wantFov) > 0.01) {
-      camera.fov += (wantFov - camera.fov) * Math.min(1, 14 * dt);
-      camera.updateProjectionMatrix();
+    const dynamics = updateCameraDynamics(camera, meMoving && isSprinting, dt, wantFov);
+    if (camMode === "follow" && dynamics.trauma > 0) {
+      camera.position.add(dynamics.shakeOffset);
     }
     fx.update(t);
     rb?.update(t, dt, lvl, bands24, mood);
@@ -1072,7 +1173,25 @@ export function runWorld(
       /* visual only */
     }
     peers.forEach((p) => {
-      pose(p.group, Math.hypot(p.targetX - p.group.position.x, p.targetZ - p.group.position.z) > 0.05, t, groove);
+      const dist = Math.hypot(p.targetX - p.group.position.x, p.targetZ - p.group.position.z);
+      const peerSpeed = dist / Math.max(0.001, dt);
+      const isPeerMoving = dist > 0.05;
+
+      if (p.char) {
+        p.char.update(dt);
+        if (p.group.userData.sit) {
+          p.char.setAction("idle");
+        } else if (p.group.userData.emote) {
+          p.char.setAction("action");
+        } else if (peerSpeed > 3.0) {
+          p.char.setAction("run");
+        } else if (isPeerMoving) {
+          p.char.setAction("walk");
+        } else {
+          p.char.setAction("idle");
+        }
+      }
+      pose(p.group, isPeerMoving, t, groove);
       p.group.position.x += (p.targetX - p.group.position.x) * Math.min(1, 8 * dt);
       p.group.position.z += (p.targetZ - p.group.position.z) * Math.min(1, 8 * dt);
       p.group.rotation.y += (p.targetYaw - p.group.rotation.y) * Math.min(1, 8 * dt);
@@ -1171,6 +1290,10 @@ export function runWorld(
         scene.remove(myPet);
         disposeCompanion(myPet);
       }
+      dashTrail.dispose();
+      footstepSparks.dispose();
+      clearActionShockwaves();
+      meChar?.dispose();
       skyBtn?.remove();
       joy?.dispose();
       window.clearTimeout(shoutTimer);
@@ -1229,6 +1352,10 @@ export function runWorld(
       if (!g || !["wave", "dance", "clap", "jump", "hand"].includes(e)) return;
       g.userData.emote = e;
       g.userData.until = performance.now() + (e === "dance" ? 6000 : e === "jump" ? 2500 : e === "hand" ? 9000 : 3000);
+      if (e === "jump" || e === "dance") {
+        createActionShockwave(scene, g.position);
+        applyCameraTrauma(0.2);
+      }
     },
     setTheme(id) {
       explicitTheme = id;

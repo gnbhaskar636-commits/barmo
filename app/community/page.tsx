@@ -18,7 +18,9 @@ export default function CommunityPage() {
   const msgs = cMsgs[room] || [];
   const people = Object.values(online);
 
-  useEffect(() => { log.current?.scrollTo(0, log.current.scrollHeight); }, [msgs.length, room]);
+  useEffect(() => {
+    log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
+  }, [msgs.length, room]);
 
   const send = () => {
     const t = text.trim();
@@ -30,55 +32,111 @@ export default function CommunityPage() {
 
   return (
     <AppShell wide>
-      <div className="pagehead">
-        <h1>Community</h1>
-        <span className="st"><i className={live ? "dot ok" : "dot"} />{live ? `${people.length + 1} online` : "Connecting…"}</span>
+      <div className="pagehead u3-pagehead">
+        <div>
+          <span className="u3-pill-badge" style={{ marginBottom: 8, display: "inline-flex" }}>GLOBAL FREQUENCIES</span>
+          <h1>Comms & Clan Chat</h1>
+          <p className="hint">Real-time synchronized gaming channels, global broadcasts & tactical comms</p>
+        </div>
+        <div className="u3-status-cluster">
+          <span className="st u3-status-badge">
+            <i className={live ? "dot ok" : "dot"} />
+            {live ? `${people.length + 1} gamers connected` : "Connecting to network..."}
+          </span>
+        </div>
       </div>
-      <div className="comm">
-        <section className="pane chatpane">
-          <div className="tabs2" role="tablist">
+
+      <div className="comm u3-comm-terminal">
+        <section className="pane chatpane u3-chat-pane">
+          <div className="tabs2 u3-channel-tabs" role="tablist">
             {ROOMS.map((r) => (
-              <button key={r.id} role="tab" aria-selected={room === r.id} onClick={() => setRoom(r.id)}>{r.icon} {r.name}</button>
+              <button
+                key={r.id}
+                role="tab"
+                aria-selected={room === r.id}
+                className={room === r.id ? "on" : ""}
+                onClick={() => setRoom(r.id)}
+              >
+                <span>{r.icon}</span> #{r.name}
+              </button>
             ))}
-            <button className="whobtn" onClick={() => setShowWho(!showWho)}>👥 {people.length + 1}</button>
+            <button className={`whobtn u3-radar-toggle ${showWho ? "on" : ""}`} onClick={() => setShowWho(!showWho)}>
+              👥 Online Radar ({people.length + 1})
+            </button>
           </div>
-          <div className="thread big" ref={log}>
-            {msgs.length === 0 && <div className="empty">No messages in this room yet. Say hello 👋</div>}
+
+          <div className="thread big u3-thread-view" ref={log}>
+            {msgs.length === 0 && (
+              <div className="empty u3-empty-state">
+                <span className="u3-empty-icon">📡</span>
+                <b>Frequency #{room} is silent.</b>
+                <p>Transmit the first message to everyone on this channel.</p>
+              </div>
+            )}
             {msgs.map((m) => {
               const mine = m.from === me?.id;
               return (
                 <div key={m.id} className={"cm" + (mine ? " mine" : "")}>
-                  <button className="who2" onClick={() => router.push("/profile?id=" + m.from)} aria-label={"Open profile of " + m.name}>
-                    <Dot av={m.av} name={m.name} size={30} />
+                  <button
+                    className="who2 u3-avatar-btn"
+                    onClick={() => router.push("/profile?id=" + m.from)}
+                    aria-label={"Open profile of " + m.name}
+                  >
+                    <Dot av={m.av} name={m.name} size={34} />
                   </button>
                   <div className={"mb " + (mine ? "me" : "them")}>
-                    <b className="nm">{mine ? "You" : m.name}</b>
-                    <div>{m.text}</div>
+                    <b className="nm">{mine ? "You (Citizen)" : m.name}</b>
+                    <div className="u3-msg-body">{m.text}</div>
                   </div>
                 </div>
               );
             })}
           </div>
-          <div className="compose">
-            <input className="inp" maxLength={300} placeholder={`Message #${room}`} value={text}
-              onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
-            <button className="btn" onClick={send}>Send</button>
+
+          <div className="compose u3-composer">
+            <input
+              className="inp u3-terminal-input"
+              maxLength={300}
+              placeholder={`Transmit to #${room}...`}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
+            />
+            <button className="btn u3-btn-send" onClick={send} disabled={!text.trim()}>
+              Transmit →
+            </button>
           </div>
         </section>
-        <aside className={"pane whopane" + (showWho ? " open" : "")}>
-          <h3>Online now</h3>
-          <div className="plist">
+
+        <aside className={"pane whopane u3-radar-pane" + (showWho ? " open" : "")}>
+          <div className="u3-radar-header">
+            <h3>Active Radar</h3>
+            <span className="u3-pulse-dot" />
+          </div>
+          <div className="plist u3-radar-list">
             {me && (
-              <button className="prow" onClick={() => router.push("/profile")}>
-                <Dot av={me.av} name={me.name} on /> <span><b>{me.name}</b> (you)<small>{me.status}</small></span>
+              <button className="prow u3-radar-row active" onClick={() => router.push("/profile")}>
+                <Dot av={me.av} name={me.name} on size={36} />
+                <div className="u3-radar-meta">
+                  <b>{me.name} <small>(You)</small></b>
+                  <span>{me.status || "Exploring Universe"}</span>
+                </div>
               </button>
             )}
             {people.map((p) => (
-              <button key={p.id} className="prow" onClick={() => router.push("/profile?id=" + p.id)}>
-                <Dot av={p.av} name={p.name} on /> <span><b>{p.name}</b><small>{p.status}</small></span>
+              <button key={p.id} className="prow u3-radar-row" onClick={() => router.push("/profile?id=" + p.id)}>
+                <Dot av={p.av} name={p.name} on size={36} />
+                <div className="u3-radar-meta">
+                  <b>{p.name}</b>
+                  <span>{p.status || "Active citizen"}</span>
+                </div>
               </button>
             ))}
-            {people.length === 0 && <p className="hint">Nobody else is here yet. Share the link and invite a friend.</p>}
+            {people.length === 0 && (
+              <div className="empty u3-empty-subtle">
+                <p>No other explorers in range. Share the BARMO portal link to invite peers.</p>
+              </div>
+            )}
           </div>
         </aside>
       </div>

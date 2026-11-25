@@ -56,10 +56,30 @@ export function addTerrace(sc: THREE.Scene) {
   const seat = mat(0x4a5675, 0.9);
   ([[-4.5, 12], [-4.5, 15], [4.5, 12.5]] as const).forEach(([x, z]) => g.add(box(1.1, 0.4, 1.1, x, 0.2, z, seat), box(1.1, 0.7, 0.2, x, 0.55, z - 0.5, seat)));
   ([[-6.4, 9.3], [6.4, 9.3], [-6.4, 18], [6.4, 18]] as const).forEach(([x, z]) => {
-    g.add(box(0.7, 0.5, 0.7, x, 0.25, z, mat(0x2a2f3f)));
-    const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), mat(0x4f7a63, 0.8));
-    bush.position.set(x, 0.85, z);
-    g.add(bush);
+    g.add(box(0.7, 0.5, 0.7, x, 0.25, z, mat(0x1a2130, 0.3, 0.6)));
+    // Multi-tiered realistic cyber bonsai tree
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 0.75, 8), mat(0x4a3728, 0.9));
+    trunk.position.set(x, 0.75, z);
+    trunk.rotation.z = (Math.random() - 0.5) * 0.15;
+    g.add(trunk);
+
+    const foliageMat = new THREE.MeshStandardMaterial({
+      color: 0x34d399,
+      roughness: 0.6,
+      emissive: 0x059669,
+      emissiveIntensity: 0.25,
+      flatShading: true,
+    });
+    [-0.1, 0.1].forEach((ox, idx) => {
+      const clump = new THREE.Mesh(new THREE.DodecahedronGeometry(0.32 + idx * 0.08, 1), foliageMat);
+      clump.position.set(x + ox, 1.1 + idx * 0.22, z + (idx ? 0.08 : -0.08));
+      g.add(clump);
+    });
+
+    // Bio-luminescent firefly spore hovering above each planter
+    const firefly = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), glow(0x6ee7b7));
+    firefly.position.set(x, 1.65, z);
+    g.add(firefly);
   });
   const bulbs = glow(0xffd9a0);
   ([-6, -2, 2, 6] as const).forEach((x) => {

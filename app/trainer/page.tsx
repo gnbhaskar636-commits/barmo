@@ -17,11 +17,26 @@ export default function TrainerPage() {
   return (
     <AppShell>
       <div className="pagehead">
-        <h1>Trainer</h1>
-        <button className="btn" onClick={() => router.push(me ? enterLoungeUrl(me.name, me.av) : "/")}>Practice in the lounge</button>
+        <span className="u3-pill-badge" style={{ marginBottom: 8, display: "inline-flex" }}>ACADEMY 3.0</span>
+        <h1>Spatial Mastery Trainer</h1>
+        <p className="hint" style={{ color: "var(--u3-text-dim)", maxWidth: 640 }}>Level up your spatial capabilities, unlock anti-gravity gear rewards, and master the multi-world universe.</p>
+        <div style={{ marginTop: 12 }}>
+          <button className="btn" onClick={() => router.push(me ? enterLoungeUrl(me.name, me.av) : "/")} style={{
+            background: "linear-gradient(135deg, var(--u3-accent), var(--u3-cyan))",
+            boxShadow: "0 0 20px rgba(139,92,246,0.35)",
+            fontWeight: 600
+          }}>🚀 Practice In Lounge</button>
+        </div>
       </div>
 
-      <div className="card lvl">
+      <div className="card lvl" style={{
+        background: "linear-gradient(135deg, rgba(139,92,246,0.12), rgba(6,182,212,0.08))",
+        border: "1px solid var(--u3-glass-border)",
+        borderRadius: "20px",
+        padding: "24px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+        margin: "24px 0"
+      }}>
         <div>
           <div className="lbl">Level {lvl}</div>
           <h2>{levelTitle(lvl)}</h2>

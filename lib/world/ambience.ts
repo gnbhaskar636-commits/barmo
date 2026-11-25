@@ -11,19 +11,37 @@ export function addAmbience(scene: THREE.Scene, origin: { x: number; z: number }
   g.name = "ambience";
   scene.add(g);
 
-  // --- motes ---
-  const N = withMotes ? 160 : 0;
+  // --- motes & bio-luminescent spore field ---
+  const N = withMotes ? 320 : 0;
   const pos = new Float32Array(N * 3);
   const spd = new Float32Array(N);
+  const colorArr = new Float32Array(N * 3);
+  const colA = new THREE.Color(baseColor);
+  const colB = new THREE.Color(0x06b6d4);
+  const tempCol = new THREE.Color();
+
   for (let i = 0; i < N; i++) {
-    pos[i * 3] = (Math.random() - 0.5) * 18;
-    pos[i * 3 + 1] = 0.3 + Math.random() * 4.2;
-    pos[i * 3 + 2] = (Math.random() - 0.5) * 15;
-    spd[i] = 0.08 + Math.random() * 0.2;
+    pos[i * 3] = (Math.random() - 0.5) * 24;
+    pos[i * 3 + 1] = 0.15 + Math.random() * 5.2;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 22;
+    spd[i] = 0.05 + Math.random() * 0.18;
+
+    tempCol.copy(colA).lerp(colB, Math.random());
+    colorArr[i * 3] = tempCol.r;
+    colorArr[i * 3 + 1] = tempCol.g;
+    colorArr[i * 3 + 2] = tempCol.b;
   }
   const mg = new THREE.BufferGeometry();
   mg.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const mm = new THREE.PointsMaterial({ color: baseColor, size: 0.06, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending });
+  mg.setAttribute("color", new THREE.BufferAttribute(colorArr, 3));
+  const mm = new THREE.PointsMaterial({
+    vertexColors: true,
+    size: 0.09,
+    transparent: true,
+    opacity: 0.65,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
   const motes = new THREE.Points(mg, mm);
   motes.frustumCulled = false;
   if (N) g.add(motes);

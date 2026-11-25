@@ -1,13 +1,85 @@
 import type { Pub } from "@/lib/social/store";
 
-export type GameId = "dice" | "quiz" | "race";
-export const GAMES: { id: GameId; name: string; icon: string; blurb: string; rounds: number }[] = [
-  { id: "dice", name: "Dice Duel", icon: "🎲", blurb: "Everyone rolls. Highest roll wins the round.", rounds: 3 },
-  { id: "quiz", name: "Quick Quiz", icon: "🧠", blurb: "Fast, correct answers score the most.", rounds: 5 },
-  { id: "race", name: "Reaction Race", icon: "🏁", blurb: "Tap the moment it turns green. Too early is a false start.", rounds: 3 },
+export type GameId = "dice" | "quiz" | "race" | "memory" | "cybercode";
+export const GAMES: {
+  id: GameId;
+  name: string;
+  icon: string;
+  blurb: string;
+  rounds: number;
+  category: "Competitive" | "Arcade" | "Skill" | "Casual";
+  playerCount: string;
+  rating: number;
+  bannerGradient: string;
+}[] = [
+  {
+    id: "dice",
+    name: "Cyber Dice Duel",
+    icon: "🎲",
+    blurb: "High-stakes quantum dice. Roll higher than rivals, trigger multipliers, and dominate.",
+    rounds: 3,
+    category: "Competitive",
+    playerCount: "1 - 8 Players",
+    rating: 4.9,
+    bannerGradient: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(6,182,212,0.2))",
+  },
+  {
+    id: "quiz",
+    name: "Neural Quiz Arena",
+    icon: "🧠",
+    blurb: "Synchronized speed-trivia across science, gaming lore, mathematics, and tech history.",
+    rounds: 5,
+    category: "Arcade",
+    playerCount: "1 - 16 Players",
+    rating: 4.8,
+    bannerGradient: "linear-gradient(135deg, rgba(6,182,212,0.3), rgba(16,185,129,0.2))",
+  },
+  {
+    id: "race",
+    name: "Quantum Warp Grand Prix",
+    icon: "🏎️",
+    blurb: "Ultra-ultimate supersonic reflex race. Enter quantum slipstream, trigger sub-150ms nitro warp, and surge ahead of rivals.",
+    rounds: 3,
+    category: "Skill",
+    playerCount: "1 - 12 Players",
+    rating: 5.0,
+    bannerGradient: "linear-gradient(135deg, rgba(245,158,11,0.35), rgba(244,63,94,0.3))",
+  },
+  {
+    id: "memory",
+    name: "Matrix Memory Lock",
+    icon: "🧩",
+    blurb: "Memorize the sequence of glowing cyber glyphs and replicate under escalating time pressure.",
+    rounds: 4,
+    category: "Casual",
+    playerCount: "1 - 6 Players",
+    rating: 4.7,
+    bannerGradient: "linear-gradient(135deg, rgba(16,185,129,0.3), rgba(6,182,212,0.2))",
+  },
+  {
+    id: "cybercode",
+    name: "Code Lab Speedrun",
+    icon: "💻",
+    blurb: "Solve competitive algorithmic code puzzles faster than other engineers in the room.",
+    rounds: 3,
+    category: "Competitive",
+    playerCount: "1 - 4 Players",
+    rating: 5.0,
+    bannerGradient: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(244,63,94,0.2))",
+  },
 ];
 
-export interface GPlayer { id: string; name: string; av: string; acc?: Pub["acc"]; top?: number; score: number }
+export interface GPlayer {
+  id: string;
+  name: string;
+  av: string;
+  acc?: Pub["acc"];
+  top?: number;
+  score: number;
+  ready?: boolean;
+  role?: "player" | "spectator";
+  team?: "neon" | "cyber" | "sol";
+}
 
 export interface GState {
   game: GameId;
@@ -16,17 +88,101 @@ export interface GState {
   rounds: number;
   host: string;
   players: Record<string, GPlayer>;
+  // Phase 7 Multiplayer Lobbies & Matchmaking
+  teamsEnabled?: boolean;
+  readyCount?: number;
+  spectatorCount?: number;
+  tournamentContext?: { tournamentId: string; matchId: string; round: number };
+  // Cyber Dice
   rolls?: Record<string, number>;
+  multipliers?: Record<string, number>;
+  // Neural Quiz
   q?: { text: string; opts: string[]; dur: number };
   answers?: Record<string, number>;
   correct?: number;
   gained?: Record<string, number>;
+  // Quantum Warp Race
   rs?: "wait" | "go";
   taps?: string[];
   early?: string[];
   times?: Record<string, number>;
+  speeds?: Record<string, string>;
+  nitro?: Record<string, boolean>;
+  slips?: Record<string, string>;
+  // Matrix Memory Lock
+  memorySeq?: number[];
+  memoryInput?: Record<string, number[]>;
+  memoryRound?: number;
+  memoryPhase?: "watch" | "input";
+  memoryFailures?: string[];
+  memoryTimes?: Record<string, number>;
+  // Code Lab Speedrun
+  codeChallengeId?: string;
+  codeTitle?: string;
+  codeBrief?: string;
+  codeStarter?: string;
+  codeSubmissions?: Record<string, string | number>;
+  codeResults?: Record<string, { pass: boolean; timeMs?: number; error?: string }>;
+  codeTimes?: Record<string, number>;
+  // Summary
   winners?: string[];
   msg: string;
+}
+
+export function isValidRoomCode(code: string): boolean {
+  return /^[A-Z0-9]{4,8}$/.test(code);
+}
+
+export function getRoomShareLink(code: string, spectate = false, origin?: string): string {
+  const base = origin || (typeof window !== "undefined" ? window.location.origin : "");
+  return `${base}/games?${spectate ? "spectate" : "join"}=${code}`;
+}
+
+export type Act =
+  | { t: "join"; pub: Pub; role?: "player" | "spectator"; team?: "neon" | "cyber" | "sol" }
+  | { t: "ready"; ready?: boolean }
+  | { t: "team"; team: "neon" | "cyber" | "sol" }
+  | { t: "role"; role: "player" | "spectator" }
+  | { t: "roll" }
+  | { t: "ans"; i: number }
+  | { t: "tap" }
+  | { t: "seq_tap"; index: number }
+  | { t: "code_submit"; code?: string; pass?: boolean; ms?: number; optionIndex?: number };
+
+export interface EngineContext {
+  later: (fn: () => void, ms: number) => void;
+  finishRound: () => void;
+  push: () => void;
+  dispatchAct: (from: string, a: Act) => void;
+}
+
+export interface RoundEvaluation {
+  scores: Record<string, number>;
+  msg?: string;
+  winnerId?: string;
+  winners?: string[];
+  telemetry?: any;
+}
+
+export interface GameEngine {
+  id: GameId;
+  name?: string;
+  initRound(round: number, currentPlayers: Record<string, GPlayer> | GPlayer[], secret?: any): Partial<GState>;
+  handleAct(action: Act, playerId: string, state: GState, secret?: any): Partial<GState> | null;
+  evaluateRound(state: GState, secret?: any): RoundEvaluation;
+  simulateBotTurn(bot: GPlayer, state: GState, dispatchAct: (act: Act) => void, secret?: any): void;
+  onRoundStart?(state: GState, secret: any, ctx: EngineContext): void;
+  isRoundComplete?(state: GState): boolean;
+}
+
+export interface GameStageProps {
+  state: GState;
+  myId: string;
+  isHost: boolean;
+  onAction: (act: Act) => void;
+  sound?: { play: (sfx: string) => void };
+  view?: GState;
+  me?: Pub;
 }
 
 export const QUESTIONS: { q: string; o: string[]; a: number }[] = [

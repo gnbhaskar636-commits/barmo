@@ -1,4 +1,4 @@
-import type { Room, Track } from "livekit-client";
+import type { Room } from "livekit-client";
 import { LiveKitUnavailable } from "@/lib/world/livekitVoice";
 
 /**
@@ -33,12 +33,12 @@ interface Tile {
   av: HTMLDivElement;
   label: HTMLSpanElement;
   mic: HTMLSpanElement;
-  track: Track | null;
+  track: any | null;
 }
 
 export function createMeet(o: MeetOptions) {
   let room: Room | null = null;
-  let lk: typeof import("livekit-client") | null = null;
+  let lk: any = null;
   let connecting = false;
   let err = "";
   const tiles = new Map<string, Tile>();
@@ -83,10 +83,10 @@ export function createMeet(o: MeetOptions) {
   /** Brings the tiles in line with who is in the call and what they are sending. */
   const sync = () => {
     if (!room || !lk) return;
-    const L = lk;
+    const L = lk as any;
     const want = new Set<string>();
     const lp = room.localParticipant;
-    const show = (key: string, name: string, local: boolean, track: Track | undefined, micOn: boolean, speaking: boolean, screen: boolean) => {
+    const show = (key: string, name: string, local: boolean, track: any | undefined, micOn: boolean, speaking: boolean, screen: boolean) => {
       want.add(key);
       let t = tiles.get(key);
       if (!t) {
@@ -167,8 +167,8 @@ export function createMeet(o: MeetOptions) {
           dynacast: true,
           audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
-        r.on(L.RoomEvent.TrackSubscribed, (track, _pub, p) => {
-          if (track.kind === L.Track.Kind.Audio) {
+        r.on(L.RoomEvent.TrackSubscribed, (track: any, _pub: any, p: any) => {
+          if (track.kind === (L.Track?.Kind?.Audio ?? "audio")) {
             const sid = sidOf(p.identity);
             if (o.isBlocked(sid)) return;
             const el = track.attach();
@@ -179,9 +179,9 @@ export function createMeet(o: MeetOptions) {
           }
           sync();
         });
-        r.on(L.RoomEvent.TrackUnsubscribed, (track) => {
-          if (track.kind === L.Track.Kind.Audio)
-            track.detach().forEach((el) => {
+        r.on(L.RoomEvent.TrackUnsubscribed, (track: any) => {
+          if (track.kind === (L.Track?.Kind?.Audio ?? "audio"))
+            track.detach().forEach((el: HTMLElement) => {
               audios.delete(el);
               el.remove();
             });

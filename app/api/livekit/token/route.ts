@@ -29,20 +29,32 @@ export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anon";
   if (limited(ip)) return NextResponse.json({ error: "Too many tries. Wait a minute." }, { status: 429 });
 
-  let b: { room?: unknown; h?: unknown; id?: unknown; name?: unknown; meet?: unknown } = {};
+  let b: { room?: unknown; h?: unknown; id?: unknown; name?: unknown; meet?: unknown; squad?: unknown; squadId?: unknown } = {};
   try {
     b = await req.json();
   } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
-  // Only real circles in real worlds get a voice room.
-  const roomId = clip(b.room, 20);
-  const h = clip(b.h, 24);
-  // `meet: true` = the Meeting Hall video table (camera + screen share). Only the meeting world has one.
+
+  const isSquad = b.squad === true;
   const meet = b.meet === true;
-  if (!isRoomId(roomId) || (meet ? roomId !== "meeting" : !getRoom(roomId).huddles.some((x) => x.id === h))) {
-    return NextResponse.json({ error: meet ? "Video meetings only exist in the Meeting Hall" : "Unknown circle" }, { status: 400 });
+
+  let channelRoom = "";
+  if (isSquad) {
+    const squadId = clip(b.squadId || b.room || b.h, 32);
+    if (!squadId) return NextResponse.json({ error: "Missing squadId" }, { status: 400 });
+    channelRoom = `barmo:squad:${squadId}`;
+  } else {
+    // Only real circles in real worlds get a voice room.
+    const roomId = clip(b.room, 20);
+    const h = clip(b.h, 24);
+    // `meet: true` = the Meeting Hall video table (camera + screen share). Only the meeting world has one.
+    if (!isRoomId(roomId) || (meet ? roomId !== "meeting" : !getRoom(roomId).huddles.some((x) => x.id === h))) {
+      return NextResponse.json({ error: meet ? "Video meetings only exist in the Meeting Hall" : "Unknown circle" }, { status: 400 });
+    }
+    channelRoom = meet ? "barmo:meeting:table" : `barmo:${roomId}:${h}`;
   }
+
   const identity = clip(b.id, 96);
   if (identity.length < 8) return NextResponse.json({ error: "Missing id" }, { status: 400 });
   const name = clip(b.name, 20) || "Guest";
@@ -50,7 +62,7 @@ export async function POST(req: Request) {
   const at = new AccessToken(key, secret, { identity, name, ttl: meet ? "3h" : "1h" });
   at.addGrant({
     roomJoin: true,
-    room: meet ? "barmo:meeting:table" : `barmo:${roomId}:${h}`,
+    room: channelRoom,
     canPublish: true,
     canSubscribe: true,
     canPublishData: false,
